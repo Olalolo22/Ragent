@@ -1,0 +1,184 @@
+{
+  "abi": [
+    {
+      "type": "function",
+      "name": "linkEscrow",
+      "inputs": [
+        {
+          "name": "intentId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "escrowId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "provider",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "registerIntent",
+      "inputs": [
+        {
+          "name": "intentId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "jobType",
+          "type": "string",
+          "internalType": "string"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "submitBid",
+      "inputs": [
+        {
+          "name": "intentId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "bidId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "priceUsdc",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "latencyMs",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "stakedPenaltyUsdc",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "event",
+      "name": "BidSubmitted",
+      "inputs": [
+        {
+          "name": "intentId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "bidId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "provider",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "priceUsdc",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "latencyMs",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "stakedPenaltyUsdc",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "timestamp",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "EscrowLinked",
+      "inputs": [
+        {
+          "name": "intentId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "escrowId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "provider",
+          "type": "address",
+          "indexed": false,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "IntentRegistered",
+      "inputs": [
+        {
+          "name": "intentId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "requester",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "jobType",
+          "type": "string",
+          "indexed": false,
+          "internalType": "string"
+        },
+        {
+          "name": "timestamp",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        }
+      ],
+      "anonymous": false
+    }
+  ],
+  "bytecode": "0x6080604052348015600f57600080fd5b506102ca8061001f6000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c80635f1c27b2146100465780639c97b21b1461005b578063f362a7881461006e575b600080fd5b61005961005436600461015d565b610081565b005b6100596100693660046101db565b6100cc565b61005961007c366004610220565b610109565b336001600160a01b0316837faf1b66ad034092351fbb372df29ccbcf996f717a650ec7fba599a01894381a728484426040516100bf9392919061025b565b60405180910390a3505050565b6040516001600160a01b0382168152829084907fafb381d6bbf592074967f6b8190b9f769a2b85922f15813de711ec9128a45eb4906020016100bf565b60408051848152602081018490529081018290524260608201523390859087907f0b391963d952b99c9355a47a47349d8729d5cc8b5e886114449d23c8289080819060800160405180910390a45050505050565b60008060006040848603121561017257600080fd5b83359250602084013567ffffffffffffffff81111561019057600080fd5b8401601f810186136101a157600080fd5b803567ffffffffffffffff8111156101b857600080fd5b8660208284010111156101ca57600080fd5b939660209190910195509293505050565b6000806000606084860312156101f057600080fd5b833592506020840135915060408401356001600160a01b038116811461021557600080fd5b809150509250925092565b600080600080600060a0868803121561023857600080fd5b505083359560208501359550604085013594606081013594506080013592509050565b604081528260408201528284606083013760006060848301015260006060601f19601f860116830101905082602083015294935050505056fea2646970667358221220592eb48ab936d8da6a7ce032b123fc5157bbb7e954d76b8dca58030202dcc7e464736f6c634300081a0033"
+}

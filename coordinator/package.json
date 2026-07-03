@@ -1,0 +1,24 @@
+{
+  "name": "ragent-coordinator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "demo": "tsx scripts/demo.ts",
+    "test-algo": "tsx scripts/test-algo.ts",
+    "test-agents": "tsx scripts/test-agents.ts",
+    "full-demo": "tsx scripts/full-demo.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "hono": "^4.5.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0",
+    "openai": "^4.0.0"
+  }
+}
