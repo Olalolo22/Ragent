@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.env
+contracts/out/
+contracts/cache/
+coordinator/node_modules/
+.DS_Store
+inital_algo
+PLAN.md
+STATUS.md
+System_Prompt
