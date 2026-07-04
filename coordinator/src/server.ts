@@ -22,6 +22,7 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import {
   Intent,
   Bid,
@@ -127,11 +128,17 @@ app.use('*', cors({ origin: 'http://localhost:8787', allowMethods: ['GET', 'POST
 // ---------------------------------------------------------------------------
 // Serve static files from public/ (the dashboard)
 // ---------------------------------------------------------------------------
-// On Vercel, path.resolve() works more reliably than serveStatic middleware
+// On Vercel, import.meta.url resolves relative to this source file
+// (coordinator/src/server.ts), so ../public/ is always correct.
 app.get('/public/index.html', (c) => {
-  const htmlPath = path.join(process.cwd(), 'public', 'index.html');
-  const html = fs.readFileSync(htmlPath, 'utf8');
-  return c.html(html);
+  const htmlPath = path.join(fileURLToPath(new URL('../public/index.html', import.meta.url)));
+  try {
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    return c.html(html);
+  } catch (e) {
+    console.error('[server] Could not read public/index.html:', htmlPath, e);
+    return c.text('Dashboard not found. Path: ' + htmlPath, 404);
+  }
 });
 
 // ---------------------------------------------------------------------------
