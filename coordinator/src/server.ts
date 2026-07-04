@@ -20,7 +20,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
-import { serveStatic } from '@hono/node-server/serve-static';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   Intent,
   Bid,
@@ -126,7 +127,12 @@ app.use('*', cors({ origin: 'http://localhost:8787', allowMethods: ['GET', 'POST
 // ---------------------------------------------------------------------------
 // Serve static files from public/ (the dashboard)
 // ---------------------------------------------------------------------------
-app.use('/public/*', serveStatic({ root: './' }));
+// On Vercel, path.resolve() works more reliably than serveStatic middleware
+app.get('/public/index.html', (c) => {
+  const htmlPath = path.join(process.cwd(), 'public', 'index.html');
+  const html = fs.readFileSync(htmlPath, 'utf8');
+  return c.html(html);
+});
 
 // ---------------------------------------------------------------------------
 // GET /  — Redirect to dashboard
