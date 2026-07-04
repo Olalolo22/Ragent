@@ -1,267 +1,256 @@
 /**
- * Ragent Full End-to-End Demo
+ * Ragent Full End-to-End Demo — All 3 Job Types
  *
- * Runs:
- * 1. Agentic: LLM (or mock) requester creates dynamic Intent
- * 2. Agentic: Multiple provider agents submit bids
- * 3. Coordinator: Runs the exact algorithm from inital_algo (hard constraints + scoring)
- * 4. On-chain simulation: Shows the calls that would be made to RagentEscrow + RagentRegistry
+ * Demonstrates the complete Ragent flow for:
+ *   Round 1: API job    — Fetch USDC/ETH price from Binance (low latency, uptime)
+ *   Round 2: Task job   — Summarize + classify a research document (capability, confidence)
+ *   Round 3: Compute job — Route inference workload to a GPU provider (capacity, uptime)
  *
- * This demonstrates:
- * - Agentic sophistication (AI decides policy + bids)
- * - Structured negotiation (not hardcoded cheapest wins)
- * - Staked SLA + attestation flow
+ * Each round:
+ *   1. Agentic Requester creates a dynamic Intent with job-specific policy
+ *   2. Provider agents (different personalities) submit EIP-712 signed bids
+ *   3. Coordinator filters (hard constraints) + scores (job-type formula) → winner
+ *   4. On-chain: escrow created, attested, released (local anvil or Arc testnet)
  *
  * Run: cd coordinator && npm run full-demo
  */
 
-import { generateDynamicIntent, generateBid, getMockPersonalities } from '../src/agents/llm-agent';
+import {
+  generateDynamicIntent,
+  generateTaskIntent,
+  generateComputeIntent,
+  generateBid,
+  getMockPersonalities,
+  getTaskPersonalities,
+  getComputePersonalities,
+  AgentPersonality,
+} from '../src/agents/llm-agent';
 import { Intent, Bid } from '../src/schemas';
 import { selectWinner, passesConstraints, scoreAndExplain } from '../src/algo';
 import * as chain from '../src/chain';
+import { signBid } from '../src/eip712';
 
-const { getCurrentAccount } = chain;
+const { getCurrentAccount, getClients } = chain;
 import { spawn } from 'child_process';
 import { setTimeout as sleep } from 'timers/promises';
 
-async function main() {
-  console.log('\n╔════════════════════════════════════════════════════════════╗');
-  console.log('║              RAGENT — FULL END-TO-END DEMO                 ║');
-  console.log('║   Negotiation Layer for the Agentic Economy on Arc        ║');
-  console.log('╚════════════════════════════════════════════════════════════╝\n');
+const USE_TESTNET  = process.env.USE_TESTNET  === 'true';
+const PRIVATE_KEY  = process.env.PRIVATE_KEY as `0x${string}` | undefined;
+const DEMO_CHAIN_ID = USE_TESTNET ? 123456 : 31337;
 
-  const taskDescription = 'Fetch the current USDC/ETH price from Binance API with low latency and high reliability';
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared negotiation round (reused for all 3 job types)
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // ============================================
-  // 1. AGENTIC REQUESTER — Dynamic Policy
-  // ============================================
-  console.log('🤖 REQUESTER AGENT (AI decides the policy)');
-  console.log('   Task:', taskDescription);
-  console.log('   → Generating dynamic selection_policy based on task...\n');
+async function runNegotiationRound(
+  roundLabel: string,
+  intent: Intent,
+  personalities: AgentPersonality[],
+  providerWallet: ReturnType<typeof getClients>['providerWallet']
+): Promise<Bid | null> {
+  const jobEmoji: Record<string, string> = { api: '🌐', task: '🧠', compute: '⚡' };
+  const emoji = jobEmoji[intent.job_type] ?? '🤖';
 
-  const intent: Intent = await generateDynamicIntent(taskDescription, {
-    endpoint: 'https://api.binance.com/api/v3/ticker/price',
-    symbol: 'ETHUSDC',
-  });
+  console.log(`\n${'─'.repeat(64)}`);
+  console.log(`${emoji}  ROUND ${roundLabel} — ${intent.job_type.toUpperCase()} JOB`);
+  console.log(`${'─'.repeat(64)}`);
+  console.log(`   Intent: ${intent.task_payload.description ?? intent.intent_id}`);
+  console.log(`   Weights:     ${JSON.stringify(intent.selection_policy.weights)}`);
+  console.log(`   Constraints: ${JSON.stringify(intent.selection_policy.constraints)}\n`);
 
-  console.log('   Intent ID:', intent.intent_id);
-  console.log('   Job Type: api');
-  console.log('   Dynamic Weights:', JSON.stringify(intent.selection_policy.weights, null, 2));
-  console.log('   Constraints:', JSON.stringify(intent.selection_policy.constraints, null, 2));
-
-  // ============================================
-  // 2. AGENTIC PROVIDERS — Smart Bidding
-  // ============================================
-  console.log('\n🤖 PROVIDER AGENTS (AI decides their offers)');
-  console.log('   Discovering intent and generating competitive bids...\n');
-
-  const personalities = getMockPersonalities();
-  const providerAddrs = ['0xProviderFast', '0xProviderReliable', '0xProviderBalanced'];
+  // ── Provider agents bid ──────────────────────────────────────────────────
+  const providerAddr = providerWallet.account!.address;
   const bids: Bid[] = [];
 
   for (let i = 0; i < personalities.length; i++) {
-    const bid = await generateBid(intent, providerAddrs[i], personalities[i], String(200 + i));
-    bids.push(bid);
+    const raw = await generateBid(intent, providerAddr, personalities[i], `agent-${i}`);
+    const signed = await signBid(raw, providerWallet, DEMO_CHAIN_ID);
+    bids.push(signed);
 
-    console.log(`   ${personalities[i].name} (${personalities[i].style})`);
-    console.log(`     → price: $${bid.terms.price_usdc}`);
-    console.log(`     → latency: ${bid.terms.latency_ms}ms`);
-    console.log(`     → stake:  $${bid.staked_penalty_usdc}`);
-    console.log(`     → reputation: ${bid.terms.reputation}`);
+    const key = intent.job_type === 'api'
+      ? `lat=${signed.terms.latency_ms}ms rep=${signed.terms.reputation}`
+      : intent.job_type === 'task'
+      ? `conf=${signed.terms.confidence} eta=${signed.terms.eta_seconds}s`
+      : `cap=${signed.terms.capacity} up=${signed.terms.uptime}`;
+
+    console.log(`   ${personalities[i].name.padEnd(14)} price=$${signed.terms.price_usdc} ${key} stake=$${signed.staked_penalty_usdc} sig=${signed.signature?.slice(0, 14)}... ✅`);
   }
 
-  // High-prio continuation: For testnet runs, register providers on ERC-8004 *before* scoring
-  // so we can "pull" live reputation into the bids (this makes reputation from chain affect winner selection)
-  const useTestnetEarly = !!process.env.ARC_RPC || process.env.USE_TESTNET === 'true';
-  const testnetKeyEarly = process.env.PRIVATE_KEY as `0x${string}` | undefined;
-  if (useTestnetEarly && testnetKeyEarly) {
-    chain.configureTestnet(testnetKeyEarly);
-    console.log('\n   [Testnet] Registering agents on ERC-8004 + seeding initial reputation (feeds scoring)...');
-    for (let i = 0; i < bids.length; i++) {
-      const bid = bids[i];
-      const personality = personalities.find((p, idx) => providerAddrs[idx] === bid.provider_address);
-      const { agentId } = await chain.registerAgent(`ipfs://ragent-demo-${personality?.name?.toLowerCase() || i}`, true);
-      bid.agent_id = agentId.toString();
-
-      // Seed different reputations via on-chain giveFeedback (this is the "live" rep we pull for scoring)
-      let initialScore = 80;
-      if (personality?.style === 'reliable-premium') initialScore = 95;
-      else if (personality?.style === 'fast-and-cheap') initialScore = 70;
-      await chain.giveFeedback(agentId, initialScore, 'initial_demo', true);
-
-      // Authentically pull the just-seeded reputation from the chain (getRecentReputation does real getLogs + decodeEventLog)
-      const pulledScore = await chain.getRecentReputation(agentId, true);
-      bid.terms.reputation = pulledScore / 100;
-
-      console.log(`     ${personality?.name}: agentId=${agentId} rep=${pulledScore} (pulled live from ERC-8004)`);
-    }
-  }
-
-  // ============================================
-  // 3. COORDINATOR — The Algorithm (from inital_algo)
-  // ============================================
-  console.log('\n⚙️  COORDINATOR — Running Ragent Algorithm');
-  console.log('   (Hard constraints first, then job-specific scoring)\n');
-
-  // Show filtering
-  console.log('   Step 1: Hard Constraints Filter');
-  let validCount = 0;
+  // ── Hard constraint filter ───────────────────────────────────────────────
+  console.log('\n   Step 1: Hard Constraints');
   for (const bid of bids) {
     const valid = passesConstraints(intent, bid);
-    console.log(`     ${bid.bid_id} (${personalities.find((p, i) => providerAddrs[i] === bid.provider_address)?.name}): ${valid ? '✓ VALID' : '✗ REJECTED'}`);
-    if (valid) validCount++;
+    const name  = personalities.find((_, i) => bids[i]?.bid_id === bid.bid_id)?.name
+                  ?? personalities[bids.indexOf(bid)]?.name;
+    console.log(`     ${(name ?? bid.bid_id).padEnd(14)} ${valid ? '✓ PASS' : '✗ FAIL'}`);
   }
 
-  console.log(`\n   ${validCount} bids passed hard constraints.`);
-
-  // Show scoring
-  console.log('\n   Step 2: Job-Specific Scoring (api)');
+  // ── Scoring ──────────────────────────────────────────────────────────────
+  console.log('\n   Step 2: Scoring');
   const scored = bids
     .filter(b => passesConstraints(intent, b))
-    .map(b => scoreAndExplain(intent, b, bids))
+    .map(b    => scoreAndExplain(intent, b, bids))
     .sort((a, b) => b.score - a.score);
 
-  scored.forEach((s, i) => {
-    const name = personalities.find((p, idx) => providerAddrs[idx] === s.bid.provider_address)?.name;
-    const rep = (s.bid.terms.reputation || 0.5) * 100;
-    const lat = s.bid.terms.latency_ms || 0;
-    console.log(`     ${i + 1}. ${name} — score: ${s.score.toFixed(4)} (rep=${rep.toFixed(0)}%, lat=${lat}ms)`);
+  scored.forEach((s, rank) => {
+    const idx  = bids.indexOf(s.bid);
+    const name = personalities[idx]?.name ?? s.bid.bid_id;
+    console.log(`     ${rank + 1}. ${name.padEnd(14)} score=${s.score.toFixed(4)}`);
   });
 
-  // Winner selection
+  // ── Winner ───────────────────────────────────────────────────────────────
   const winner = selectWinner(intent, bids);
-  console.log('\n   Step 3: Winner Selected');
-  if (winner) {
-    const winnerName = personalities.find((p, i) => providerAddrs[i] === winner.provider_address)?.name;
-    console.log(`     🏆 WINNER: ${winnerName} (${winner.provider_address})`);
-    console.log(`        price: $${winner.terms.price_usdc} | latency: ${winner.terms.latency_ms}ms | stake: $${winner.staked_penalty_usdc}`);
-    console.log(`        (Won thanks to strong on-chain reputation + low latency in the weighted score)`);
+  if (!winner) {
+    console.log('\n   ✗ No bids passed constraints — no winner this round.');
+    return null;
   }
 
-  // ============================================
-  // 4. ON-CHAIN SETTLEMENT (REAL TXs on local anvil)
-  // ============================================
-  const useTestnet = !!process.env.ARC_RPC || process.env.USE_TESTNET === 'true';
-  const testnetKey = process.env.PRIVATE_KEY as `0x${string}` | undefined;
+  const winnerIdx  = bids.indexOf(winner);
+  const winnerName = personalities[winnerIdx]?.name ?? winner.bid_id;
+  console.log(`\n   🏆 WINNER: ${winnerName} — $${winner.terms.price_usdc} USDC`);
+  return winner;
+}
 
-  console.log(`\n⛓️  ON-CHAIN SETTLEMENT — ${useTestnet ? 'Arc Testnet + ERC-8004' : 'local anvil'}`);
+// ─────────────────────────────────────────────────────────────────────────────
+// On-chain settlement helper (shared across rounds)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function settleOnChain(
+  contracts: chain.DeployedContracts,
+  winner: Bid,
+  intent: Intent
+): Promise<void> {
+  const escrowId = ('0x' + Buffer.from(intent.intent_id)
+    .toString('hex').padEnd(64, '0').slice(0, 64)) as `0x${string}`;
+
+  const price   = BigInt(Math.round(winner.terms.price_usdc * 1e6));
+  const penalty = BigInt(Math.round(winner.staked_penalty_usdc * 1e6));
+  const provider = USE_TESTNET
+    ? getCurrentAccount().address
+    : '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as `0x${string}`;
+
+  await chain.createEscrow(contracts, escrowId, provider, price, penalty, USE_TESTNET);
+
+  const observedLatency = Math.floor((winner.terms.latency_ms ?? 400) * 0.88);
+  const proofHash = ('0x' + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')) as `0x${string}`;
+
+  console.log(`   Observed latency: ${observedLatency}ms`);
+  await chain.attest(contracts, escrowId, true, proofHash, USE_TESTNET);
+  await chain.release(contracts, escrowId, USE_TESTNET);
+  console.log(`   ✅ Escrow released to provider.`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function main() {
+  console.log('\n╔════════════════════════════════════════════════════════════╗');
+  console.log('║          RAGENT — FULL MULTI-JOB END-TO-END DEMO          ║');
+  console.log('║    Negotiation Layer for the Agentic Economy on Arc       ║');
+  console.log('╚════════════════════════════════════════════════════════════╝');
+
+  if (USE_TESTNET && PRIVATE_KEY) chain.configureTestnet(PRIVATE_KEY);
+
+  const { providerWallet } = getClients(USE_TESTNET);
+
+  // ── ROUND 1: API job ──────────────────────────────────────────────────────
+  const apiIntent = await generateDynamicIntent(
+    'Fetch the current USDC/ETH price from Binance API with low latency and high reliability',
+    { endpoint: 'https://api.binance.com/api/v3/ticker/price', symbol: 'ETHUSDC' }
+  );
+  const apiWinner = await runNegotiationRound('1/3', apiIntent, getMockPersonalities(), providerWallet);
+
+  // ── ROUND 2: Task job ─────────────────────────────────────────────────────
+  const taskIntent = await generateTaskIntent(
+    'Summarize and classify a 10-page DeFi research paper into structured JSON',
+    ['nlp', 'summarize', 'classify'],
+    { source: 'arxiv', domain: 'defi' }
+  );
+  const taskWinner = await runNegotiationRound('2/3', taskIntent, getTaskPersonalities(), providerWallet);
+
+  // ── ROUND 3: Compute job ──────────────────────────────────────────────────
+  const computeIntent = await generateComputeIntent(
+    'Route a 7B parameter LLM inference workload to an available GPU provider',
+    { model: 'llama-3-7b', tokens: 2048 }
+  );
+  const computeWinner = await runNegotiationRound('3/3', computeIntent, getComputePersonalities(), providerWallet);
+
+  // ── ON-CHAIN SETTLEMENT ───────────────────────────────────────────────────
+  const chainLabel = USE_TESTNET ? '🌐 Arc Testnet + ERC-8004' : '🔧 Local Anvil';
+  console.log(`\n${'─'.repeat(64)}`);
+  console.log(`⛓️  ON-CHAIN SETTLEMENT — ${chainLabel}`);
+  console.log(`${'─'.repeat(64)}`);
 
   let anvilProcess: ReturnType<typeof spawn> | null = null;
   const ANVIL_BIN = `${process.env.HOME}/.foundry/bin/anvil`;
 
   try {
-    if (useTestnet && testnetKey) {
-      chain.configureTestnet(testnetKey);
-    }
-
-    if (useTestnet) {
-      console.log('  Using Arc Testnet — deploying RagentEscrow + full SLA flow + ERC-8004');
-
-      // Deploy our contracts on testnet (uses real USDC from USDC_ADDRESS env)
-      const contracts = await chain.deployContracts(true);
-
-      // Use the configured account address as the "provider" for this testnet demo
-      const realProvider = getCurrentAccount().address;  // from chain.ts after configure
-
-      const escrowId = ('0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')) as `0x${string}`;
-
-      if (winner) {
-        const price = BigInt(Math.floor(winner.terms.price_usdc * 1e18));
-        const penalty = BigInt(Math.floor(winner.staked_penalty_usdc * 1e18));
-
-        // Full escrow flow on real testnet
-        await chain.createEscrow(contracts, escrowId, realProvider, price, penalty, true);
-
-        const observedLatency = Math.floor((winner.terms.latency_ms || 500) * 0.9);
-        const proofHash = ('0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')) as `0x${string}`;
-
-        console.log(`   Provider executed in ${observedLatency}ms`);
-        console.log(`   proofHash: ${proofHash.slice(0, 18)}...`);
-
-        await chain.attest(contracts, escrowId, true, proofHash, true);
-        await chain.release(contracts, escrowId, true);
-
-        console.log('\n   ✅ Full escrow flow completed on Arc testnet!');
-      }
-
-      // ERC-8004 final reputation using the agentId that was registered *before* scoring (so it influenced the selection)
-      if (winner && winner.agent_id) {
-        const finalAgentId = BigInt(winner.agent_id);
-        await chain.giveFeedback(finalAgentId, 92, 'sla_met', true);
-        console.log(`   ✅ Final reputation recorded for agentId=${finalAgentId} (the one used in scoring)`);
-      } else {
-        // Fallback register if no pre-registered agent
-        const { agentId } = await chain.registerAgent(
-          'ipfs://bafkreibdi6623n3xpf7ymk62ckb4bo75o3qemwkpfvp5i25j66itxvsoei',
-          true
-        );
-        if (winner) {
-          await chain.giveFeedback(agentId, 92, 'sla_met', true);
-        }
-        console.log('   ✅ ERC-8004 reputation recorded (fallback registration)');
-      }
-
-      console.log(`   Explorer: https://testnet.arcscan.app`);
-    } else {
-      // Local anvil path (original behavior)
+    if (!USE_TESTNET) {
       try {
         await chain.publicClient.getBlockNumber();
-        console.log('  Anvil already running on :8545');
+        console.log('   Anvil already running on :8545');
       } catch {
-        console.log('  Starting temporary anvil...');
+        console.log('   Starting temporary anvil...');
         anvilProcess = spawn(ANVIL_BIN, ['--block-time', '1', '--silent'], {
-          stdio: 'ignore',
-          detached: true,
+          stdio: 'ignore', detached: true,
         });
         await sleep(1800);
       }
+    }
 
-      const contracts = await chain.deployContracts();
-      const escrowId = ('0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')) as `0x${string}`;
+    const contracts = await chain.deployContracts(USE_TESTNET);
+    console.log('   Contracts deployed.\n');
 
-      if (winner) {
-        const price = BigInt(Math.floor(winner.terms.price_usdc * 1e18));
-        const penalty = BigInt(Math.floor(winner.staked_penalty_usdc * 1e18));
-        const realProvider = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as `0x${string}`;
+    // Settle each winning bid on-chain
+    const rounds: Array<[string, Bid | null, Intent]> = [
+      ['API',     apiWinner,     apiIntent    ],
+      ['Task',    taskWinner,    taskIntent   ],
+      ['Compute', computeWinner, computeIntent],
+    ];
 
-        await chain.createEscrow(contracts, escrowId, realProvider, price, penalty);
-
-        const observedLatency = Math.floor((winner.terms.latency_ms || 500) * 0.9);
-        const proofHash = ('0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')) as `0x${string}`;
-
-        console.log(`   Provider executed in ${observedLatency}ms`);
-        console.log(`   proofHash: ${proofHash.slice(0, 18)}...`);
-
-        await chain.attest(contracts, escrowId, true, proofHash);
-        await chain.release(contracts, escrowId);
-
-        console.log('\n   ✅ On-chain flow completed successfully!');
-        console.log(`      Provider received $${winner.terms.price_usdc} + penalty back.`);
+    for (const [label, winner, intent] of rounds) {
+      if (!winner) {
+        console.log(`   ${label}: no winner — skipping settlement.`);
+        continue;
       }
+      console.log(`   Settling ${label} job (winner: $${winner.terms.price_usdc})...`);
+      await settleOnChain(contracts, winner, intent);
     }
+
+    // ERC-8004 reputation update on testnet (for API round winner as demo)
+    if (USE_TESTNET && apiWinner?.agent_id) {
+      const agentId = BigInt(apiWinner.agent_id);
+      await chain.giveFeedback(agentId, 92, 'sla_met', true);
+      console.log(`\n   ✅ ERC-8004 reputation recorded for agentId=${agentId}`);
+    }
+
+    if (USE_TESTNET) console.log(`   Explorer: https://testnet.arcscan.app`);
+
   } catch (err: any) {
-    console.log('\n   (On-chain execution failed — continuing with simulation)');
-    console.log('   Error:', err.message || err);
-    if (useTestnet) {
-      console.log('   Tip: Set PRIVATE_KEY to a funded Arc testnet key + ARC_RPC if needed.');
-    }
+    console.log('\n   ⚠ On-chain execution failed — chain not available.');
+    console.log('  ', err.message ?? err);
+    if (USE_TESTNET) console.log('   Tip: Set PRIVATE_KEY + USDC_ADDRESS for Arc testnet.');
   } finally {
     if (anvilProcess) {
-      console.log('  Cleaning up temporary anvil...');
+      console.log('\n   Cleaning up anvil...');
       anvilProcess.kill('SIGTERM');
     }
   }
 
-  console.log('\n════════════════════════════════════════════════════════════');
-  console.log('✅ RAGENT FULL FLOW COMPLETE');
-  console.log('   1. Agentic: AI requester created dynamic policy');
-  console.log('   2. Agentic: AI providers submitted competitive bids');
-  console.log('   3. Algorithm: Hard constraints + job-specific scoring → winner');
-  console.log('   4. On-chain: Real ' + (useTestnet ? 'Arc testnet escrow + ERC-8004' : 'local anvil escrow'));
-  console.log('════════════════════════════════════════════════════════════\n');
-
-  console.log('Run on real Arc testnet:');
-  console.log('  USE_TESTNET=true PRIVATE_KEY=0x... USDC_ADDRESS=0x... npm run full-demo\n');
+  // ── SUMMARY ───────────────────────────────────────────────────────────────
+  console.log('\n╔════════════════════════════════════════════════════════════╗');
+  console.log('║                ✅ RAGENT FULL FLOW COMPLETE                ║');
+  console.log('╠════════════════════════════════════════════════════════════╣');
+  console.log(`║  Round 1 — API     winner: ${(apiWinner ? '$' + apiWinner.terms.price_usdc + ' USDC' : 'none').padEnd(30)}║`);
+  console.log(`║  Round 2 — Task    winner: ${(taskWinner ? '$' + taskWinner.terms.price_usdc + ' USDC' : 'none').padEnd(30)}║`);
+  console.log(`║  Round 3 — Compute winner: ${(computeWinner ? '$' + computeWinner.terms.price_usdc + ' USDC' : 'none').padEnd(30)}║`);
+  console.log('╠════════════════════════════════════════════════════════════╣');
+  console.log('║  Each winner: EIP-712 signed bid, hard constraint filter,  ║');
+  console.log('║  job-specific scoring, on-chain escrow + attest + release  ║');
+  console.log('╠════════════════════════════════════════════════════════════╣');
+  console.log('║  Arc testnet: USE_TESTNET=true PRIVATE_KEY=0x... npm run full-demo ║');
+  console.log('╚════════════════════════════════════════════════════════════╝\n');
 }
 
 main().catch((e) => {

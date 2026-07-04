@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ragent — Negotiation Layer for the Agentic Economy</title>
+  <meta name="description" content="Live negotiation dashboard: AI agents bid on jobs, the coordinator filters by hard constraints and scores by policy, winner gets an on-chain escrow." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Reset & Root ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #080b14;
+      --surface:      #0d1117;
+      --surface2:     #161c28;
+      --surface3:     #1e2636;
+      --border:       rgba(99,130,200,0.15);
+      --border-glow:  rgba(99,130,200,0.4);
+      --accent:       #6366f1;
+      --accent2:      #818cf8;
+      --accent-glow:  rgba(99,102,241,0.25);
+      --green:        #22d3a1;
+      --green-dim:    rgba(34,211,161,0.12);
+      --red:          #f87171;
+      --red-dim:      rgba(248,113,113,0.12);
+      --gold:         #fbbf24;
+      --gold-dim:     rgba(251,191,36,0.15);
+      --text:         #e2e8f0;
+      --text-muted:   #64748b;
+      --text-dim:     #94a3b8;
+      --radius:       12px;
+      --radius-lg:    18px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ─── Background Glow ──────────────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% -10%, rgba(99,102,241,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 85% 110%, rgba(34,211,161,0.08) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── Layout ───────────────────────────────────────────────────────────── */
+    .app { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    header {
+      padding: 24px 32px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13,17,23,0.8);
+      backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--green));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .logo-text { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo-text span { color: var(--accent2); }
+
+    .tagline {
+      font-size: 12px;
+      color: var(--text-muted);
+      border-left: 1px solid var(--border);
+      padding-left: 16px;
+      flex: 1;
+    }
+
+    .status-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 100px;
+      font-size: 11px; font-weight: 600;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text-dim);
+      transition: all 0.3s;
+    }
+    .status-pill.online { border-color: rgba(34,211,161,0.3); color: var(--green); }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.3s;
+    }
+    .status-pill.online .status-dot { background: var(--green); animation: pulse 2s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    main { flex: 1; padding: 32px; max-width: 1200px; width: 100%; margin: 0 auto; }
+
+    /* ─── Job Type Selector ────────────────────────────────────────────────── */
+    .section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .job-tabs {
+      display: flex; gap: 8px; margin-bottom: 32px; flex-wrap: wrap;
+    }
+
+    .job-tab {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px; font-weight: 600; color: var(--text-dim);
+      user-select: none;
+    }
+    .job-tab:hover { border-color: var(--border-glow); color: var(--text); background: var(--surface3); }
+    .job-tab.active {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.1);
+      color: var(--accent2);
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .job-tab-icon { font-size: 18px; }
+    .job-tab-sub { font-size: 10px; color: var(--text-muted); font-weight: 400; margin-top: 1px; }
+
+    .run-btn {
+      margin-left: auto;
+      padding: 12px 28px; border-radius: var(--radius);
+      border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), #4f46e5);
+      color: #fff; font-weight: 700; font-size: 13px;
+      letter-spacing: 0.3px;
+      transition: all 0.2s;
+      display: flex; align-items: center; gap: 8px;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.35);
+    }
+    .run-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(99,102,241,0.5);
+    }
+    .run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .run-btn .spinner {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .run-btn.loading .spinner { display: block; }
+    .run-btn.loading .btn-label { display: none; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Intent card ──────────────────────────────────────────────────────── */
+    #intent-panel { margin-bottom: 28px; display: none; }
+
+    .intent-card {
+      padding: 20px 24px; border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      animation: fadeSlideIn 0.4s ease;
+    }
+    .intent-card h3 { font-size: 13px; font-weight: 700; color: var(--accent2); margin-bottom: 6px; }
+    .intent-desc { color: var(--text-dim); font-size: 13px; margin-bottom: 14px; }
+
+    .constraint-grid {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .constraint-tag {
+      padding: 4px 10px; border-radius: 6px;
+      font-size: 11px; font-family: 'JetBrains Mono', monospace;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+
+    /* ─── Providers Grid ───────────────────────────────────────────────────── */
+    #providers-panel { margin-bottom: 28px; display: none; }
+
+    .providers-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .provider-card {
+      padding: 20px; border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      position: relative; overflow: hidden;
+      transition: all 0.3s;
+      animation: fadeSlideIn 0.5s ease both;
+    }
+    .provider-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .provider-card.winner { border-color: var(--gold); }
+    .provider-card.winner::before { background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: 1; }
+    .provider-card.failed { opacity: 0.5; }
+    .provider-card.failed::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(248,113,113,0.03) 8px, rgba(248,113,113,0.03) 16px);
+    }
+
+    .provider-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+    }
+    .provider-name { font-size: 15px; font-weight: 700; }
+    .provider-style {
+      font-size: 10px; padding: 3px 8px; border-radius: 4px;
+      background: var(--surface2); color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .bid-stats { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    .stat-row { display: flex; align-items: center; justify-content: space-between; }
+    .stat-label { font-size: 11px; color: var(--text-muted); }
+    .stat-value { font-size: 12px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+    .constraint-result {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 12px; border-radius: 8px;
+      font-size: 12px; font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .constraint-result.pass { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,211,161,0.2); }
+    .constraint-result.fail { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+
+    .score-bar-wrap { margin-top: 8px; }
+    .score-bar-label { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    .score-bar-label span { font-size: 10px; color: var(--text-muted); }
+    .score-bar-label strong { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text); }
+    .score-bar-track {
+      height: 6px; border-radius: 3px;
+      background: var(--surface2);
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      width: 0; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .provider-card.winner .score-bar-fill {
+      background: linear-gradient(90deg, var(--gold), #fde68a);
+    }
+
+    .winner-badge {
+      display: none; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 8px;
+      background: var(--gold-dim); border: 1px solid rgba(251,191,36,0.3);
+      color: var(--gold); font-size: 12px; font-weight: 700;
+      margin-top: 10px;
+    }
+    .provider-card.winner .winner-badge { display: flex; }
+
+    /* ─── Flow Animation ───────────────────────────────────────────────────── */
+    .flow-steps {
+      display: flex; align-items: center; gap: 0;
+      margin-bottom: 28px; flex-wrap: wrap; row-gap: 12px;
+    }
+    .flow-step {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      font-size: 12px; font-weight: 500; color: var(--text-muted);
+      transition: all 0.3s;
+    }
+    .flow-step.active { border-color: var(--accent); color: var(--accent2); background: rgba(99,102,241,0.08); }
+    .flow-step.done   { border-color: rgba(34,211,161,0.3); color: var(--green); background: var(--green-dim); }
+    .flow-arrow { color: var(--text-muted); padding: 0 4px; font-size: 12px; }
+    .flow-step-num {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--surface3); font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .flow-step.active .flow-step-num { background: var(--accent); color: #fff; }
+    .flow-step.done .flow-step-num { background: var(--green); color: #000; }
+
+    /* ─── Summary Banner ───────────────────────────────────────────────────── */
+    #summary-panel { display: none; animation: fadeSlideIn 0.5s ease; margin-top: 8px; }
+
+    .summary-card {
+      padding: 28px 32px; border-radius: var(--radius-lg);
+      border: 1px solid rgba(251,191,36,0.3);
+      background: linear-gradient(135deg, rgba(251,191,36,0.06), rgba(99,102,241,0.06));
+      display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
+    }
+    .summary-trophy { font-size: 48px; flex-shrink: 0; }
+    .summary-body { flex: 1; min-width: 200px; }
+    .summary-body h2 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .summary-body h2 span { color: var(--gold); }
+    .summary-body p { color: var(--text-dim); font-size: 13px; }
+    .summary-stats { display: flex; gap: 20px; flex-wrap: wrap; }
+    .summary-stat { text-align: center; }
+    .summary-stat-val { font-size: 22px; font-weight: 800; color: var(--accent2); font-family: 'JetBrains Mono', monospace; }
+    .summary-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    /* ─── Empty State ───────────────────────────────────────────────────────── */
+    #empty-state {
+      text-align: center; padding: 80px 32px;
+      color: var(--text-muted);
+    }
+    .empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.4; }
+    #empty-state h2 { font-size: 18px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; }
+    #empty-state p { font-size: 13px; max-width: 400px; margin: 0 auto; line-height: 1.7; }
+
+    /* ─── Error Toast ───────────────────────────────────────────────────────── */
+    #error-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      padding: 12px 24px; border-radius: var(--radius);
+      background: #2d1515; border: 1px solid rgba(248,113,113,0.4);
+      color: var(--red); font-size: 13px;
+      display: none; z-index: 200;
+      animation: fadeSlideIn 0.3s ease;
+    }
+
+    /* ─── Animations ────────────────────────────────────────────────────────── */
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .provider-card:nth-child(1) { animation-delay: 0.05s; }
+    .provider-card:nth-child(2) { animation-delay: 0.12s; }
+    .provider-card:nth-child(3) { animation-delay: 0.19s; }
+
+    /* ─── Footer ─────────────────────────────────────────────────────────────── */
+    footer {
+      padding: 16px 32px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--accent2); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">R<span>agent</span></div>
+    </div>
+    <div class="tagline">Negotiation Layer for the Agentic Economy · Arc Chain</div>
+    <div id="status-pill" class="status-pill">
+      <div class="status-dot"></div>
+      <span id="status-label">Connecting...</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Job Type Tabs + Run Button -->
+    <div class="section-label">Select Job Type</div>
+    <div class="job-tabs">
+      <button class="job-tab active" data-job="api" id="tab-api" type="button">
+        <span class="job-tab-icon">🌐</span>
+        <div>
+          <div>API Job</div>
+          <div class="job-tab-sub">Fetch · Query · Endpoint</div>
+        </div>
+      </button>
+      <button class="job-tab" data-job="task" id="tab-task" type="button">
+        <span class="job-tab-icon">🧠</span>
+        <div>
+          <div>Task Job</div>
+          <div class="job-tab-sub">Summarize · Classify · Extract</div>
+        </div>
+      </button>
+      <button class="job-tab" data-job="compute" id="tab-compute" type="button">
+        <span class="job-tab-icon">⚡</span>
+        <div>
+          <div>Compute Job</div>
+          <div class="job-tab-sub">GPU · Inference · Routing</div>
+        </div>
+      </button>
+      <button class="run-btn" id="run-btn" type="button">
+        <div class="spinner"></div>
+        <span class="btn-label">▶ Run Negotiation</span>
+      </button>
+    </div>
+
+    <!-- Flow steps -->
+    <div class="flow-steps" id="flow-steps">
+      <div class="flow-step" id="step-1" data-step="1">
+        <div class="flow-step-num">1</div>
+        <span>Intent Created</span>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="step-2" data-step="2">
+        <div class="flow-step-num">2</div>
+        <span>Providers Bid</span>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="step-3" data-step="3">
+        <div class="flow-step-num">3</div>
+        <span>Constraints Filter</span>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="step-4" data-step="4">
+        <div class="flow-step-num">4</div>
+        <span>Scored &amp; Ranked</span>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" id="step-5" data-step="5">
+        <div class="flow-step-num">5</div>
+        <span>Winner Selected</span>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="empty-state">
+      <div class="empty-icon">🤖</div>
+      <h2>Ready to Negotiate</h2>
+      <p>Select a job type above and click <strong>Run Negotiation</strong> to watch AI agents compete for the contract in real time.</p>
+    </div>
+
+    <!-- Intent panel -->
+    <div id="intent-panel">
+      <div class="section-label">Active Intent</div>
+      <div class="intent-card" id="intent-card">
+        <h3 id="intent-job-type">API JOB</h3>
+        <div class="intent-desc" id="intent-desc">-</div>
+        <div class="constraint-grid" id="constraint-grid"></div>
+      </div>
+    </div>
+
+    <!-- Providers panel -->
+    <div id="providers-panel">
+      <div class="section-label">Provider Agents Bidding</div>
+      <div class="providers-grid" id="providers-grid"></div>
+    </div>
+
+    <!-- Summary panel -->
+    <div id="summary-panel">
+      <div class="summary-card" id="summary-card">
+        <div class="summary-trophy">🏆</div>
+        <div class="summary-body">
+          <h2>Winner: <span id="summary-winner-name">-</span></h2>
+          <p id="summary-winner-desc">-</p>
+        </div>
+        <div class="summary-stats">
+          <div class="summary-stat">
+            <div class="summary-stat-val" id="stat-price">-</div>
+            <div class="summary-stat-label">Price (USDC)</div>
+          </div>
+          <div class="summary-stat">
+            <div class="summary-stat-val" id="stat-score">-</div>
+            <div class="summary-stat-label">Score</div>
+          </div>
+          <div class="summary-stat">
+            <div class="summary-stat-val" id="stat-stake">-</div>
+            <div class="summary-stat-label">Staked Penalty</div>
+          </div>
+          <div class="summary-stat">
+            <div class="summary-stat-val" id="stat-passed">-</div>
+            <div class="summary-stat-label">Passed Filter</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Built on <a href="https://arc.io" target="_blank" rel="noopener noreferrer">Arc Chain</a> ·
+    Ragent — Negotiation Layer for the Agentic Economy ·
+    <a href="/health" target="_blank" rel="noopener noreferrer">API Health</a>
+  </footer>
+</div>
+
+<div id="error-toast"></div>
+
+<script>
+  // ─── Security: All DOM mutations use textContent / createElement ───────────
+  // No innerHTML with user/server data is used anywhere in this file.
+  // All server responses are treated as untrusted plain text.
+
+  const API_BASE = '';  // Same origin — served by Hono
+
+  // ─── State ─────────────────────────────────────────────────────────────────
+  let activeJob = 'api';
+  let isRunning  = false;
+
+  // ─── Elements ──────────────────────────────────────────────────────────────
+  const runBtn         = document.getElementById('run-btn');
+  const statusPill     = document.getElementById('status-pill');
+  const statusLabel    = document.getElementById('status-label');
+  const emptyState     = document.getElementById('empty-state');
+  const intentPanel    = document.getElementById('intent-panel');
+  const providersPanel = document.getElementById('providers-panel');
+  const summaryPanel   = document.getElementById('summary-panel');
+  const errorToast     = document.getElementById('error-toast');
+  const intentJobType  = document.getElementById('intent-job-type');
+  const intentDesc     = document.getElementById('intent-desc');
+  const constraintGrid = document.getElementById('constraint-grid');
+  const providersGrid  = document.getElementById('providers-grid');
+  const summaryWinnerName = document.getElementById('summary-winner-name');
+  const summaryWinnerDesc = document.getElementById('summary-winner-desc');
+  const statPrice      = document.getElementById('stat-price');
+  const statScore      = document.getElementById('stat-score');
+  const statStake      = document.getElementById('stat-stake');
+  const statPassed     = document.getElementById('stat-passed');
+
+  // ─── Health Check ──────────────────────────────────────────────────────────
+  async function checkHealth() {
+    try {
+      const res  = await fetch(API_BASE + '/health');
+      const data = await res.json();
+      statusPill.classList.add('online');
+      // Only safe string from server — no HTML, displayed as text
+      const mode = String(data.mode ?? 'unknown');
+      statusLabel.textContent = 'Online · ' + mode;
+    } catch {
+      statusPill.classList.remove('online');
+      statusLabel.textContent = 'Server offline';
+    }
+  }
+  checkHealth();
+  setInterval(checkHealth, 15_000);
+
+  // ─── Tab Switching ─────────────────────────────────────────────────────────
+  document.querySelectorAll('.job-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      if (isRunning) return;
+      document.querySelectorAll('.job-tab').forEach(function(t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      activeJob = tab.getAttribute('data-job');
+      resetUI();
+    });
+  });
+
+  // ─── Flow Step Helper ──────────────────────────────────────────────────────
+  function setStep(stepNum, state) {
+    for (var i = 1; i <= 5; i++) {
+      var el = document.getElementById('step-' + i);
+      el.classList.remove('active', 'done');
+      if (i < stepNum)  el.classList.add('done');
+      if (i === stepNum) el.classList.add('active');
+    }
+  }
+
+  function allStepsDone() {
+    for (var i = 1; i <= 5; i++) {
+      var el = document.getElementById('step-' + i);
+      el.classList.remove('active');
+      el.classList.add('done');
+    }
+  }
+
+  // ─── Reset UI ─────────────────────────────────────────────────────────────
+  function resetUI() {
+    intentPanel.style.display    = 'none';
+    providersPanel.style.display = 'none';
+    summaryPanel.style.display   = 'none';
+    emptyState.style.display     = 'block';
+    providersGrid.replaceChildren();
+    constraintGrid.replaceChildren();
+    for (var i = 1; i <= 5; i++) {
+      var el = document.getElementById('step-' + i);
+      el.classList.remove('active', 'done');
+    }
+  }
+
+  // ─── Show Error ────────────────────────────────────────────────────────────
+  function showError(msg) {
+    errorToast.textContent = '⚠ ' + msg;
+    errorToast.style.display = 'block';
+    setTimeout(function() { errorToast.style.display = 'none'; }, 4000);
+  }
+
+  // ─── Safe Text Helpers ─────────────────────────────────────────────────────
+  function safeText(val) {
+    // Convert any server value to a safe string for textContent
+    if (val === null || val === undefined) return '—';
+    return String(val);
+  }
+
+  function safeNum(val, decimals) {
+    var n = parseFloat(val);
+    if (isNaN(n)) return '—';
+    return n.toFixed(decimals !== undefined ? decimals : 2);
+  }
+
+  // ─── Build Intent Card ─────────────────────────────────────────────────────
+  function renderIntent(jobType, intent) {
+    var labels = { api: '🌐 API JOB', task: '🧠 TASK JOB', compute: '⚡ COMPUTE JOB' };
+    intentJobType.textContent = labels[jobType] || safeText(jobType);
+
+    var desc = intent.task_payload && intent.task_payload.description
+      ? String(intent.task_payload.description)
+      : String(intent.intent_id);
+    intentDesc.textContent = desc;
+
+    constraintGrid.replaceChildren();
+    var constraints = (intent.selection_policy && intent.selection_policy.constraints) || {};
+    Object.entries(constraints).forEach(function(entry) {
+      var key = entry[0]; var val = entry[1];
+      var tag = document.createElement('div');
+      tag.className = 'constraint-tag';
+      var display = Array.isArray(val) ? val.join(', ') : safeText(val);
+      tag.textContent = key + ': ' + display;
+      constraintGrid.appendChild(tag);
+    });
+
+    intentPanel.style.display = 'block';
+  }
+
+  // ─── Build Provider Cards ──────────────────────────────────────────────────
+  function renderProviders(providers, jobType) {
+    providersGrid.replaceChildren();
+
+    var maxScore = 0;
+    providers.forEach(function(p) {
+      if (p.score && p.score > maxScore) maxScore = p.score;
+    });
+
+    providers.forEach(function(p) {
+      var card = document.createElement('div');
+      card.className = 'provider-card';
+
+      // Header
+      var header = document.createElement('div');
+      header.className = 'provider-header';
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'provider-name';
+      nameEl.textContent = safeText(p.name);
+
+      var styleEl = document.createElement('div');
+      styleEl.className = 'provider-style';
+      styleEl.textContent = safeText(p.style);
+
+      header.appendChild(nameEl);
+      header.appendChild(styleEl);
+      card.appendChild(header);
+
+      // Stats
+      var stats = document.createElement('div');
+      stats.className = 'bid-stats';
+      var bid = p.bid || {};
+      var terms = bid.terms || {};
+
+      var statDefs = [];
+      statDefs.push({ label: 'Price', value: '$' + safeNum(terms.price_usdc, 4) + ' USDC' });
+      statDefs.push({ label: 'Staked Penalty', value: '$' + safeNum(bid.staked_penalty_usdc, 2) });
+
+      if (jobType === 'api') {
+        statDefs.push({ label: 'Latency', value: safeText(terms.latency_ms) + 'ms' });
+        statDefs.push({ label: 'Reputation', value: safeNum(terms.reputation, 2) });
+        statDefs.push({ label: 'Uptime', value: (parseFloat(terms.uptime) * 100).toFixed(1) + '%' });
+      } else if (jobType === 'task') {
+        statDefs.push({ label: 'Confidence', value: safeNum(terms.confidence, 2) });
+        statDefs.push({ label: 'ETA', value: safeText(terms.eta_seconds) + 's' });
+        statDefs.push({ label: 'Capabilities', value: (terms.capability_tags || []).join(', ') || '—' });
+      } else {
+        statDefs.push({ label: 'Capacity', value: (parseFloat(terms.capacity) * 100).toFixed(0) + '%' });
+        statDefs.push({ label: 'Uptime', value: (parseFloat(terms.uptime) * 100).toFixed(1) + '%' });
+        statDefs.push({ label: 'Latency', value: safeText(terms.latency_ms) + 'ms' });
+      }
+
+      statDefs.forEach(function(s) {
+        var row = document.createElement('div');
+        row.className = 'stat-row';
+        var lbl = document.createElement('div'); lbl.className = 'stat-label'; lbl.textContent = s.label;
+        var val = document.createElement('div'); val.className = 'stat-value'; val.textContent = s.value;
+        row.appendChild(lbl); row.appendChild(val);
+        stats.appendChild(row);
+      });
+      card.appendChild(stats);
+
+      // Constraint result
+      var cr = document.createElement('div');
+      cr.className = 'constraint-result ' + (p.passes_constraints ? 'pass' : 'fail');
+      cr.textContent = p.passes_constraints ? '✓ Passes all constraints' : '✗ Fails hard constraints';
+      card.appendChild(cr);
+
+      // Score bar
+      if (p.passes_constraints && p.score !== null) {
+        var barWrap = document.createElement('div');
+        barWrap.className = 'score-bar-wrap';
+
+        var barLabel = document.createElement('div');
+        barLabel.className = 'score-bar-label';
+        var barLabelText = document.createElement('span');
+        barLabelText.textContent = 'Score';
+        var barScore = document.createElement('strong');
+        barScore.textContent = safeNum(p.score, 4);
+        barLabel.appendChild(barLabelText);
+        barLabel.appendChild(barScore);
+
+        var track = document.createElement('div');
+        track.className = 'score-bar-track';
+        var fill = document.createElement('div');
+        fill.className = 'score-bar-fill';
+        fill.dataset.pct = maxScore > 0 ? String((p.score / maxScore) * 100) : '0';
+        track.appendChild(fill);
+
+        barWrap.appendChild(barLabel);
+        barWrap.appendChild(track);
+        card.appendChild(barWrap);
+      }
+
+      // Winner badge
+      var badge = document.createElement('div');
+      badge.className = 'winner-badge';
+      badge.textContent = '🏆 Winner — contract awarded';
+      card.appendChild(badge);
+
+      if (!p.passes_constraints) card.classList.add('failed');
+
+      card.dataset.providerId = safeText(p.name);
+      providersGrid.appendChild(card);
+    });
+
+    providersPanel.style.display = 'block';
+  }
+
+  // ─── Animate score bars ────────────────────────────────────────────────────
+  function animateScoreBars() {
+    setTimeout(function() {
+      document.querySelectorAll('.score-bar-fill').forEach(function(bar) {
+        bar.style.width = (bar.dataset.pct || '0') + '%';
+      });
+    }, 100);
+  }
+
+  // ─── Mark winner ──────────────────────────────────────────────────────────
+  function markWinner(winnerIdx) {
+    var cards = document.querySelectorAll('.provider-card');
+    if (cards[winnerIdx]) cards[winnerIdx].classList.add('winner');
+  }
+
+  // ─── Render Summary ────────────────────────────────────────────────────────
+  function renderSummary(data) {
+    var winner = data.winner;
+    var passed = data.providers.filter(function(p) { return p.passes_constraints; }).length;
+    var total  = data.providers.length;
+
+    summaryWinnerName.textContent = safeText(winner.name);
+    var winnerTerms = (winner.terms || {});
+    summaryWinnerDesc.textContent =
+      'Beat ' + (total - 1) + ' competitors on the ' + safeText(data.job_type) + ' job. ' +
+      'Stake: $' + safeNum(winner.staked_penalty_usdc, 2) + ' USDC held in escrow.';
+
+    statPrice.textContent  = '$' + safeNum(winnerTerms.price_usdc, 4);
+    statScore.textContent  = safeNum(data.providers[data.winner_idx] && data.providers[data.winner_idx].score, 4);
+    statStake.textContent  = '$' + safeNum(winner.staked_penalty_usdc, 2);
+    statPassed.textContent = passed + '/' + total;
+
+    summaryPanel.style.display = 'block';
+  }
+
+  // ─── Main Run Flow ─────────────────────────────────────────────────────────
+  runBtn.addEventListener('click', async function() {
+    if (isRunning) return;
+    isRunning = true;
+    runBtn.classList.add('loading');
+    runBtn.disabled = true;
+    emptyState.style.display = 'none';
+    resetUI();
+    emptyState.style.display = 'none';
+
+    try {
+      // Step 1
+      setStep(1);
+      await delay(300);
+
+      var res = await fetch(API_BASE + '/demo/run?job_type=' + encodeURIComponent(activeJob));
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: 'Server error' }; });
+        throw new Error(safeText(err.error));
+      }
+      var data = await res.json();
+
+      // Step 1 done — render intent
+      setStep(1, 'done');
+      renderIntent(data.job_type, data.intent);
+      await delay(400);
+
+      // Step 2 — providers appear
+      setStep(2);
+      await delay(300);
+      renderProviders(data.providers, data.job_type);
+      await delay(600);
+
+      // Step 3 — constraints shown (already rendered)
+      setStep(3);
+      await delay(500);
+
+      // Step 4 — score bars animate
+      setStep(4);
+      animateScoreBars();
+      await delay(1000);
+
+      // Step 5 — winner
+      setStep(5);
+      await delay(300);
+      if (data.winner !== null) {
+        markWinner(data.winner_idx);
+        await delay(400);
+        renderSummary(data);
+      }
+
+      allStepsDone();
+
+    } catch (e) {
+      showError(e.message || 'Failed to connect to Ragent server. Is it running on :8787?');
+      resetUI();
+    } finally {
+      isRunning = false;
+      runBtn.classList.remove('loading');
+      runBtn.disabled = false;
+    }
+  });
+
+  function delay(ms) {
+    return new Promise(function(resolve) { setTimeout(resolve, ms); });
+  }
+</script>
+</body>
+</html>

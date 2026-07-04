@@ -42,6 +42,7 @@ export interface Bid {
 
 export interface ProofSubmission {
   bid_id: string;
+  intent_id?: string;          // for verifier agent to look up the original intent
   observed_latency_ms: number;
   response_hash: string;       // keccak or content hash of result
   timestamp: number;
