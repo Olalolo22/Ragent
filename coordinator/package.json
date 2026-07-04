@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
     "demo": "tsx scripts/demo.ts",
     "test-algo": "tsx scripts/test-algo.ts",
