@@ -8,6 +8,7 @@
     "dev": "tsx watch --env-file=.env src/server.ts",
     "demo": "tsx --env-file=.env scripts/full-demo.ts",
     "traction": "tsx --env-file=.env scripts/generate-traction.ts",
+    "compile:contracts": "cd ../contracts && forge build",
     "test-algo": "tsx --env-file=.env scripts/test-algo.ts",
     "test-agents": "tsx --env-file=.env scripts/test-agents.ts",
     "full-demo": "tsx --env-file=.env scripts/full-demo.ts",
