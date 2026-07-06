@@ -138,13 +138,14 @@ export async function releaseCircleEscrow(intentId: string): Promise<string> {
 
   const res = await walletsClient.createTransaction({
     walletId:            escrow.walletId,
-    blockchain:          'ARC-TESTNET' as any,
+    blockchain:          'ARC-TESTNET',
     tokenId:             USDC_TOKEN_ID,
     destinationAddress:  escrow.provider,
     amount:              [String(escrow.priceUsdc)],
-  });
+    fee:                 { type: 'level', config: { feeLevel: 'MEDIUM' } },
+  } as any);
 
-  const txId = (res.data as any)?.transaction?.id ?? res.data?.id ?? 'unknown';
+  const txId = (res.data as any)?.transaction?.id ?? (res.data as any)?.id ?? 'unknown';
   console.log(`[Circle Escrow] ✅ Release submitted. Circle TX ID: ${txId}`);
   console.log(`[Circle Escrow]    Verify at: https://console.circle.com`);
 
@@ -169,13 +170,14 @@ export async function slashCircleEscrow(intentId: string): Promise<string> {
 
   const res = await walletsClient.createTransaction({
     walletId:            escrow.walletId,
-    blockchain:          'ARC-TESTNET' as any,
+    blockchain:          'ARC-TESTNET',
     tokenId:             USDC_TOKEN_ID,
     destinationAddress:  escrow.requester,
     amount:              [String(slashAmount)],
-  });
+    fee:                 { type: 'level', config: { feeLevel: 'MEDIUM' } },
+  } as any);
 
-  const txId = (res.data as any)?.transaction?.id ?? res.data?.id ?? 'unknown';
+  const txId = (res.data as any)?.transaction?.id ?? (res.data as any)?.id ?? 'unknown';
   console.log(`[Circle Escrow] ✅ Slash submitted. Circle TX ID: ${txId}`);
 
   activeEscrows.delete(intentId);
