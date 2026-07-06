@@ -46,6 +46,23 @@ import { verifyBidSignature } from './eip712.js';
 import { verifyWork } from './agents/verifier-agent.js';
 import type { Hex, Address } from 'viem';
 
+// ── Circle Trust Layer (optional — used when CIRCLE_API_KEY is set) ──────────
+import { isCircleAvailable } from './circle/client.js';
+import { createAgentWallet, getAgentWallet } from './circle/wallets.js';
+import {
+  deployEscrowViaCircle,
+  createEscrowViaCircle,
+  attestViaCircle,
+  releaseViaCircle,
+  slashViaCircle,
+} from './circle/contracts.js';
+import {
+  verifyCircleSignature,
+  handleCircleWebhookEvent,
+  getWebhookEventLog,
+  type CircleWebhookEvent,
+} from './circle/webhooks.js';
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -54,8 +71,8 @@ const USE_TESTNET = process.env.USE_TESTNET === 'true';
 const PRIVATE_KEY = process.env.PRIVATE_KEY as Hex | undefined;
 const PORT = Number(process.env.PORT ?? 8787);
 
-// Chain IDs: 31337 = anvil local, 123456 = Arc testnet placeholder
-const CHAIN_ID = USE_TESTNET ? 123456 : 31337;
+// Chain IDs: 31337 = anvil local, 5042002 = Arc Testnet
+const CHAIN_ID = USE_TESTNET ? 5042002 : 31337;
 
 // Require signatures in production; accept unsigned bids in local demo mode
 // Default ON — disable only explicitly (e.g. STRICT_SIGNATURES=false for local script testing)
@@ -472,6 +489,56 @@ app.post('/submit-proof', async (c) => {
     explorer_url: settleTx && USE_TESTNET
       ? `https://testnet.arcscan.app/tx/${settleTx}`
       : null,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /webhooks/circle
+// Circle fires this when any escrow transaction confirms on-chain.
+// The signature is verified using HMAC-SHA256 — no trust required.
+// ---------------------------------------------------------------------------
+app.post('/webhooks/circle', async (c) => {
+  // Read raw body for signature verification (MUST be raw, not parsed)
+  const rawBody = await c.req.text();
+  const signature = c.req.header('x-circle-signature') ?? '';
+
+  // ── Verify signature ─────────────────────────────────────────────────────
+  if (!verifyCircleSignature(rawBody, signature)) {
+    console.error('[Webhooks] ❌ Invalid Circle signature — rejecting.');
+    return c.json({ error: 'Invalid signature' }, 401);
+  }
+
+  // ── Parse and handle ─────────────────────────────────────────────────────
+  let event: CircleWebhookEvent;
+  try {
+    event = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const description = handleCircleWebhookEvent(event);
+  return c.json({ ok: true, handled: description });
+});
+
+// ---------------------------------------------------------------------------
+// GET /webhooks/events
+// Returns the audit log of all verified Circle webhook events received.
+// Third parties can poll this to independently verify settlement history.
+// ---------------------------------------------------------------------------
+app.get('/webhooks/events', (c) => {
+  return c.json({ events: getWebhookEventLog() });
+});
+
+// ---------------------------------------------------------------------------
+// GET /circle/status
+// Shows whether the Circle Trust Layer is active (keys configured)
+// ---------------------------------------------------------------------------
+app.get('/circle/status', (c) => {
+  return c.json({
+    circle_trust_layer_active: isCircleAvailable,
+    note: isCircleAvailable
+      ? 'Escrow is routed through Circle Smart Contract Platform. Settlement verified via signed webhooks.'
+      : 'Circle API keys not set — using viem fallback (local/testnet direct). Set CIRCLE_API_KEY + ENTITY_SECRET to enable trust layer.',
   });
 });
 
