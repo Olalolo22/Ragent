@@ -141,7 +141,7 @@ export async function releaseCircleEscrow(intentId: string): Promise<string> {
     blockchain:          'ARC-TESTNET' as any,
     tokenId:             USDC_TOKEN_ID,
     destinationAddress:  escrow.provider,
-    amounts:             [String(escrow.priceUsdc)],
+    amount:              [String(escrow.priceUsdc)],
   });
 
   const txId = (res.data as any)?.transaction?.id ?? res.data?.id ?? 'unknown';
@@ -172,7 +172,7 @@ export async function slashCircleEscrow(intentId: string): Promise<string> {
     blockchain:          'ARC-TESTNET' as any,
     tokenId:             USDC_TOKEN_ID,
     destinationAddress:  escrow.requester,
-    amounts:             [String(slashAmount)],
+    amount:              [String(slashAmount)],
   });
 
   const txId = (res.data as any)?.transaction?.id ?? res.data?.id ?? 'unknown';

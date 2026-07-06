@@ -17,9 +17,7 @@
  *   CIRCLE_API_KEY     — from https://console.circle.com (Test API Key)
  *   ENTITY_SECRET     — from https://console.circle.com (Dev-Controlled Wallets)
  */
-
 import { initiateDeveloperControlledWalletsClient } from '@circle-fin/developer-controlled-wallets';
-import { initiateSmartContractPlatformClient }      from '@circle-fin/smart-contract-platform';
 
 const CIRCLE_API_KEY  = process.env.CIRCLE_API_KEY;
 const ENTITY_SECRET   = process.env.ENTITY_SECRET;
@@ -43,15 +41,4 @@ export const walletsClient = CIRCLE_API_KEY && ENTITY_SECRET
       entitySecret: ENTITY_SECRET,
     })
   : null;
-
-/**
- * Circle Smart Contract Platform client.
- * Used to deploy RagentEscrow and call its functions
- * (createEscrow, attest, release, slash) via Circle's relayer API.
- * Every call appears in Circle's dashboard — verifiable by anyone.
- */
-export const contractsClient = CIRCLE_API_KEY
-  ? initiateSmartContractPlatformClient({ apiKey: CIRCLE_API_KEY })
-  : null;
-
 export const isCircleAvailable = !!(CIRCLE_API_KEY && ENTITY_SECRET);
