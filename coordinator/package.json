@@ -7,6 +7,7 @@
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
     "demo": "tsx scripts/full-demo.ts",
+    "traction": "tsx scripts/generate-traction.ts",
     "test-algo": "tsx scripts/test-algo.ts",
     "test-agents": "tsx scripts/test-agents.ts",
     "full-demo": "tsx scripts/full-demo.ts",
