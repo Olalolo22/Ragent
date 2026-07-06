@@ -62,6 +62,13 @@ import {
   getWebhookEventLog,
   type CircleWebhookEvent,
 } from './circle/webhooks.js';
+import {
+  createCircleEscrow,
+  releaseCircleEscrow,
+  slashCircleEscrow,
+  getCircleEscrow,
+  getAllCircleEscrows,
+} from './circle/escrow.js';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -335,28 +342,58 @@ app.post('/select', async (c) => {
   winners.set(intent_id, winner);
   console.log('[Coordinator] Winner selected:', winner.bid_id, winner.provider_address);
 
-  // ── On-chain: createEscrow ───────────────────────────────────────────────
+  const priceUsdc   = winner.terms.price_usdc;
+  const penaltyUsdc = winner.staked_penalty_usdc;
+
+  // ── PRIMARY: Circle Programmable Wallet Escrow ───────────────────────────
+  // Funds held by Circle (licensed, regulated) — NOT our unaudited contract.
+  // Circle co-signs all transfers. Anyone can verify via Circle dashboard.
+  if (isCircleAvailable) {
+    try {
+      const { walletId, walletAddress } = await createCircleEscrow({
+        intentId:    intent_id,
+        requester:   intent.requester_address ?? 'unknown',
+        provider:    winner.provider_address,
+        priceUsdc,
+        penaltyUsdc,
+      });
+
+      console.log('[Coordinator] Circle escrow wallet created:', walletAddress);
+      return c.json({
+        winner,
+        trust_layer:      'circle',
+        escrow_type:      'circle_programmable_wallet',
+        escrow_wallet_id: walletId,
+        escrow_address:   walletAddress,
+        payment_instruction: `Send ${priceUsdc + penaltyUsdc} USDC to ${walletAddress} on Arc Testnet to fund escrow.`,
+        note: 'Funds held by Circle (not Ragent). Circle co-signs all transfers.',
+      });
+    } catch (circleErr: any) {
+      console.warn('[Coordinator] Circle escrow failed, falling back to on-chain:', circleErr.message);
+    }
+  }
+
+  // ── FALLBACK: On-chain escrow (local dev / no Circle keys) ───────────────
   let escrowTx: Hex | null = null;
   let chainError: string | null = null;
 
   try {
     const contracts = await getContracts();
-
     const intentIdHex = ('0x' + Buffer.from(intent_id).toString('hex').padEnd(64, '0').slice(0, 64)) as Hex;
-    const priceUsdc         = BigInt(Math.round(winner.terms.price_usdc * 1_000_000));
-    const stakedPenaltyUsdc = BigInt(Math.round(winner.staked_penalty_usdc * 1_000_000));
+    const priceUsdcBig         = BigInt(Math.round(priceUsdc * 1_000_000));
+    const stakedPenaltyUsdcBig = BigInt(Math.round(penaltyUsdc * 1_000_000));
 
     escrowTx = await createEscrow(
       contracts,
       intentIdHex,
       winner.provider_address as Address,
-      priceUsdc,
-      stakedPenaltyUsdc,
+      priceUsdcBig,
+      stakedPenaltyUsdcBig,
       USE_TESTNET
     );
 
     activeEscrows.set(winner.bid_id, escrowTx);
-    console.log('[Coordinator] Escrow created. Tx:', escrowTx);
+    console.log('[Coordinator] On-chain escrow created. Tx:', escrowTx);
   } catch (err: any) {
     chainError = err?.message ?? String(err);
     console.error('[Coordinator] createEscrow failed:', chainError);
@@ -364,13 +401,13 @@ app.post('/select', async (c) => {
 
   return c.json({
     winner,
+    trust_layer:  'on_chain',
+    escrow_type:  'ragent_escrow_sol',
     escrow_tx:    escrowTx,
     chain_error:  chainError,
     explorer_url: escrowTx && USE_TESTNET
       ? `https://testnet.arcscan.app/tx/${escrowTx}`
-      : escrowTx
-        ? `http://localhost:8545 (anvil local)`
-        : null,
+      : escrowTx ? `http://localhost:8545 (anvil local)` : null,
   });
 });
 
@@ -438,6 +475,35 @@ app.post('/submit-proof', async (c) => {
     `[Coordinator] Proof for ${body.bid_id}: latency=${body.observed_latency_ms}ms, sla_success=${slaSuccess}`
   );
 
+  // ── PRIMARY: Circle release / slash ─────────────────────────────────────
+  const circleEscrow = getCircleEscrow(intentId ?? body.bid_id);
+  if (isCircleAvailable && circleEscrow) {
+    try {
+      const circleIntentId = intentId ?? body.bid_id;
+      let circleTxId: string;
+
+      if (slaSuccess) {
+        circleTxId = await releaseCircleEscrow(circleIntentId);
+        console.log('[Coordinator] Circle release submitted. TX ID:', circleTxId);
+      } else {
+        circleTxId = await slashCircleEscrow(circleIntentId);
+        console.log('[Coordinator] Circle slash submitted. TX ID:', circleTxId);
+      }
+
+      return c.json({
+        ok:               true,
+        trust_layer:      'circle',
+        sla_success:      slaSuccess,
+        circle_tx_id:     circleTxId,
+        verifier_result:  verifierResult,
+        note:             `Funds ${slaSuccess ? 'released to provider' : 'returned to requester'} via Circle. Verify at https://console.circle.com`,
+      });
+    } catch (circleErr: any) {
+      console.warn('[Coordinator] Circle settle failed, falling back to on-chain:', circleErr.message);
+    }
+  }
+
+  // ── FALLBACK: On-chain attest + release/slash ────────────────────────────
   let attestTx: Hex | null     = null;
   let settleTx: Hex | null     = null;
   let repTx:    Hex | null     = null;
@@ -445,34 +511,27 @@ app.post('/submit-proof', async (c) => {
 
   try {
     const contracts = await getContracts();
-
-    // escrowId = the intentIdHex we used in createEscrow (re-derive from bid)
     const winnerBid  = [...bidsByIntent.values()].flat().find((b) => b.bid_id === body.bid_id);
     const winnerIntentId = winnerBid?.intent_id ?? intentId ?? '';
     const escrowId   = ('0x' + Buffer.from(winnerIntentId).toString('hex').padEnd(64, '0').slice(0, 64)) as Hex;
 
-    // 1. Attest
     attestTx = await attest(contracts, escrowId, slaSuccess, proofHash, USE_TESTNET);
 
-    // 2. Release (success) or Slash (failure)
     if (slaSuccess) {
       settleTx = await release(contracts, escrowId, USE_TESTNET);
-      console.log('[Coordinator] Escrow released to provider.');
+      console.log('[Coordinator] On-chain escrow released to provider.');
     } else {
       settleTx = await slash(contracts, escrowId, USE_TESTNET);
-      console.log('[Coordinator] Escrow slashed (SLA breach).');
+      console.log('[Coordinator] On-chain escrow slashed (SLA breach).');
     }
 
-    // 3. ERC-8004 reputation update (if bid has agent_id, testnet only)
     if (USE_TESTNET && winnerBid?.agent_id) {
       const agentId = BigInt(winnerBid.agent_id);
       const score   = slaSuccess ? 90 : -30;
       const tag     = slaSuccess ? 'sla_met' : 'sla_breach';
       repTx = await giveFeedback(agentId, score, tag, true);
-      console.log(`[Coordinator] ERC-8004 feedback recorded for agent ${agentId}.`);
     }
 
-    // Remove from active escrows after settlement
     activeEscrows.delete(body.bid_id);
   } catch (err: any) {
     chainError = err?.message ?? String(err);
@@ -481,6 +540,7 @@ app.post('/submit-proof', async (c) => {
 
   return c.json({
     ok:          !chainError,
+    trust_layer: 'on_chain',
     sla_success: slaSuccess,
     attest_tx:   attestTx,
     settle_tx:   settleTx,
