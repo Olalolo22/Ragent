@@ -35,7 +35,8 @@ const __dirname = dirname(__filename);
 
 const ANVIL_RPC = 'http://localhost:8545';
 const ARC_TESTNET_RPC = process.env.ARC_RPC || 'https://rpc.testnet.arc.network';
-const USDC_TESTNET = (process.env.USDC_ADDRESS as Address) || '0x0000000000000000000000000000000000000000';
+// Arc Testnet: USDC is the native gas token, represented at this address
+const USDC_TESTNET = (process.env.USDC_ADDRESS as Address) || '0x3600000000000000000000000000000000000000';
 
 const anvilChain: Chain = {
   id: 31337,
@@ -45,10 +46,11 @@ const anvilChain: Chain = {
 };
 
 const arcTestnetChain: Chain = {
-  id: 123456, // placeholder; Arc testnet doesn't require exact id for http transport
+  id: 5042002, // Arc Testnet official chain ID
   name: 'Arc Testnet',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 6 },
   rpcUrls: { default: { http: [ARC_TESTNET_RPC] } },
+  blockExplorers: { default: { name: 'ArcScan', url: 'https://testnet.arcscan.app' } },
 };
 
 // Default anvil private keys (well known, only for local dev)

@@ -38,7 +38,7 @@ import { setTimeout as sleep } from 'timers/promises';
 
 const USE_TESTNET  = process.env.USE_TESTNET  === 'true';
 const PRIVATE_KEY  = process.env.PRIVATE_KEY as `0x${string}` | undefined;
-const DEMO_CHAIN_ID = USE_TESTNET ? 123456 : 31337;
+const DEMO_CHAIN_ID = USE_TESTNET ? 5042002 : 31337; // Arc Testnet chain ID = 5042002
 
 // Video mode: cleaner, less noisy output + final structured JSON (great for recording)
 const VIDEO_MODE = process.env.VIDEO === '1' || process.env.VIDEO_MODE === '1' || process.argv.includes('--video');
