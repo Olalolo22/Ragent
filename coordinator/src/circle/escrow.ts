@@ -90,9 +90,9 @@ export async function createCircleEscrow(params: {
 
   console.log(`[Circle Escrow] Creating escrow wallet for intent ${params.intentId}...`);
 
-  const res = await walletsClient.createWallets({
-    blockchains:  [ARC_BLOCKCHAIN],
-    count:        1,
+    const res = await walletsClient.createWallets({
+      blockchains:  [ARC_BLOCKCHAIN as any],
+      count:        1,
     walletSetId:  setId,
     metadata: [{
       name:        `Ragent Escrow — ${params.intentId.slice(0, 10)}`,

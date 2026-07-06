@@ -59,7 +59,7 @@ export async function createAgentWallet(agentId: string): Promise<{ walletId: st
   const setId = await getOrCreateWalletSet();
 
   const res = await walletsClient.createWallets({
-    blockchains: [ARC_BLOCKCHAIN],
+    blockchains: [ARC_BLOCKCHAIN as any],
     count: 1,
     walletSetId: setId,
   });
