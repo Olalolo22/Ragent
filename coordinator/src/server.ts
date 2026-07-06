@@ -19,7 +19,6 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serve } from '@hono/node-server';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -79,7 +78,11 @@ const CHAIN_ID = USE_TESTNET ? 5042002 : 31337;
 const STRICT_SIGNATURES = process.env.STRICT_SIGNATURES !== 'false';
 
 if (USE_TESTNET && PRIVATE_KEY) {
-  configureTestnet(PRIVATE_KEY);
+  try {
+    configureTestnet(PRIVATE_KEY);
+  } catch (e: any) {
+    console.error('[Coordinator] Failed to configure PRIVATE_KEY (invalid format?):', e?.message || e);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -152,28 +155,26 @@ app.use('*', cors({
 // Robust path resolution for both local (tsx) and Vercel serverless.
 // includeFiles in vercel.json ensures public/** is present at function root.
 app.get('/public/index.html', (c) => {
-  const candidates = [
-    // Best for Vercel (files from includeFiles live at process.cwd() of the function)
-    path.join(process.cwd(), 'public', 'index.html'),
-    // ESM import.meta relative (good for tsx / certain dev setups)
-    path.join(fileURLToPath(new URL('../public/index.html', import.meta.url))),
-    // Relative assuming different layouts
-    path.join(fileURLToPath(new URL('../../public/index.html', import.meta.url))),
-  ];
+  let candidates: string[] = [];
+  try {
+    candidates = [
+      // Best for Vercel (included files are at process.cwd() root of the lambda)
+      path.join(process.cwd(), 'public', 'index.html'),
+      // ESM import.meta (works in dev, may be transformed in bundle)
+      path.join(fileURLToPath(new URL('../public/index.html', import.meta.url))),
+    ];
+  } catch {
+    candidates = [path.join(process.cwd(), 'public', 'index.html')];
+  }
 
-  let htmlPath: string | null = null;
   let html: string | null = null;
-
   for (const p of candidates) {
     try {
       if (fs.existsSync(p)) {
-        htmlPath = p;
         html = fs.readFileSync(p, 'utf8');
         break;
       }
-    } catch (_) {
-      // ignore, try next
-    }
+    } catch (_) {}
   }
 
   if (html) {
@@ -185,9 +186,19 @@ app.get('/public/index.html', (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /  — Redirect to dashboard
+// GET /  — basic landing (the full fancy dashboard is at /public/index.html)
 // ---------------------------------------------------------------------------
-app.get('/', (c) => c.redirect('/public/index.html', 302));
+app.get('/', (c) => {
+  return c.html(`
+    <!doctype html>
+    <html><head><meta charset="utf-8"><title>Ragent Coordinator</title></head>
+    <body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
+      <h1>Ragent Coordinator is up</h1>
+      <p>API is running. Try <a href="/health" style="color:#7c3aed">/health</a> or the full demo UI at <a href="/public/index.html" style="color:#7c3aed">/public/index.html</a>.</p>
+      <p>If the dashboard 404s, the API endpoints still work.</p>
+    </body></html>
+  `);
+});
 
 // ---------------------------------------------------------------------------
 // GET /health
@@ -622,19 +633,23 @@ app.get('/circle/status', (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Export for testing / Bun
+// Export for testing / Bun / Vercel adapter
 // ---------------------------------------------------------------------------
 export default app;
 
 // ---------------------------------------------------------------------------
-// Start server (tsx / Node)
+// Start server (tsx / Node) — skipped on Vercel (uses hono/vercel adapter)
 // ---------------------------------------------------------------------------
 if (!process.env.VERCEL) {
-  const mode = USE_TESTNET ? '🌐 Arc Testnet' : '🔧 Local Anvil';
-  console.log(`\n🚀 Ragent Coordinator — ${mode}`);
-  console.log(`   Listening on http://localhost:${PORT}`);
-  console.log(`   STRICT_SIGNATURES=${STRICT_SIGNATURES}`);
-  console.log(`   Contracts deploy lazily on first /select\n`);
+  // Dynamic import (IIFE) so no top-level await and we don't pull node-server into Vercel bundle
+  (async () => {
+    const { serve } = await import('@hono/node-server');
+    const mode = USE_TESTNET ? '🌐 Arc Testnet' : '🔧 Local Anvil';
+    console.log(`\n🚀 Ragent Coordinator — ${mode}`);
+    console.log(`   Listening on http://localhost:${PORT}`);
+    console.log(`   STRICT_SIGNATURES=${STRICT_SIGNATURES}`);
+    console.log(`   Contracts deploy lazily on first /select\n`);
 
-  serve({ fetch: app.fetch, port: PORT });
+    serve({ fetch: app.fetch, port: PORT });
+  })();
 }
