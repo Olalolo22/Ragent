@@ -4,5 +4,14 @@
       "source": "/(.*)",
       "destination": "/api/index"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": [
+        "artifacts/**",
+        "public/**",
+        "src/**"
+      ]
+    }
+  }
 }

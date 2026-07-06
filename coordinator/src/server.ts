@@ -140,22 +140,48 @@ app.use('*', async (c, next) => {
   c.res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 });
 
-app.use('*', cors({ origin: 'http://localhost:8787', allowMethods: ['GET', 'POST'] }));
+app.use('*', cors({ 
+  origin: (origin) => origin ?? '*', 
+  allowMethods: ['GET', 'POST'],
+  allowHeaders: ['Content-Type', 'x-circle-signature'],
+}));
 
 // ---------------------------------------------------------------------------
 // Serve static files from public/ (the dashboard)
 // ---------------------------------------------------------------------------
-// On Vercel, import.meta.url resolves relative to this source file
-// (coordinator/src/server.ts), so ../public/ is always correct.
+// Robust path resolution for both local (tsx) and Vercel serverless.
+// includeFiles in vercel.json ensures public/** is present at function root.
 app.get('/public/index.html', (c) => {
-  const htmlPath = path.join(fileURLToPath(new URL('../public/index.html', import.meta.url)));
-  try {
-    const html = fs.readFileSync(htmlPath, 'utf8');
-    return c.html(html);
-  } catch (e) {
-    console.error('[server] Could not read public/index.html:', htmlPath, e);
-    return c.text('Dashboard not found. Path: ' + htmlPath, 404);
+  const candidates = [
+    // Best for Vercel (files from includeFiles live at process.cwd() of the function)
+    path.join(process.cwd(), 'public', 'index.html'),
+    // ESM import.meta relative (good for tsx / certain dev setups)
+    path.join(fileURLToPath(new URL('../public/index.html', import.meta.url))),
+    // Relative assuming different layouts
+    path.join(fileURLToPath(new URL('../../public/index.html', import.meta.url))),
+  ];
+
+  let htmlPath: string | null = null;
+  let html: string | null = null;
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        htmlPath = p;
+        html = fs.readFileSync(p, 'utf8');
+        break;
+      }
+    } catch (_) {
+      // ignore, try next
+    }
   }
+
+  if (html) {
+    return c.html(html);
+  }
+
+  console.error('[server] Could not find public/index.html. Tried:', candidates);
+  return c.text('Dashboard not found. Tried paths: ' + candidates.join(' | '), 404);
 });
 
 // ---------------------------------------------------------------------------
