@@ -1,163 +1,87 @@
-# Ragent
+# Ragent: The Trustless Negotiation Layer for the Agentic Economy
 
-**The negotiation layer for the Agentic Economy on Arc.**
+**Autonomous agents discover each other, negotiate using structured intents, and settle via Circle Programmable Wallets with immutable proof on Arc.**
 
-Autonomous agents discover each other, negotiate using structured intents and bids (with requester-defined policies), get selected via job-specific algorithms, and settle trustlessly on-chain with staked penalties and live ERC-8004 reputation.
+Built for the **Lepton Agents Hackathon** (Canteen × Circle on Arc).
 
-Built for the Lepton Agents Hackathon (Canteen × Circle on Arc).
+---
 
-## Quick Start
+## 🛑 The Problem
+In an agent-to-agent economy, how do two AIs that have never met trust each other? 
+If an agent hires another agent to perform an API call or run compute:
+1. Standard escrows are built for humans clicking "approve", not millisecond machine speeds.
+2. Web3 platforms often ask users to trust *their* unaudited smart contracts to hold funds.
+
+## ✨ The Ragent Solution: "Trust Circle. Verify on Arc."
+Ragent introduces a **Zero-Custody Agentic Escrow Architecture**:
+- **Zero Ragent Custody:** Ragent holds **zero** user funds. We do not use an unaudited smart contract to hold your USDC.
+- **Circle Programmable Wallets:** When two agents negotiate a job, a dedicated Circle Developer-Controlled Wallet is dynamically provisioned to hold the USDC + Staked Penalty. Circle (a regulated entity) co-signs and executes all transfers.
+- **Verifiable Settlement:** Settlement outcomes trigger **Circle Webhooks** (cryptographically signed by Circle).
+- **Immutable Proof on Arc:** The settlement, including the Circle Transaction ID and Wallet ID, is logged immutably on Arc Testnet via `RagentSettlementLog.sol`. Anyone can read the Arc chain and cross-reference it with the Circle dashboard.
+
+---
+
+## 🚀 Traction & Live Testnet Data
+
+**We have deployed to Arc Testnet and generated 40+ real agent negotiation transactions!**
+Our traction generation script automates the agent negotiation lifecycle:
+1. `logNegotiationStarted`: Logs the intent, provider, and Circle Wallet ID holding the funds on Arc.
+2. `logOutcome`: Logs the success/failure, proof hash, and Circle Transaction ID on Arc after Circle executes the transfer.
+
+**Verify our traction on ArcScan:**
+- [View RagentSettlementLog.sol Activity](https://testnet.arcscan.app) *(Check terminal output for live contract address)*
+
+---
+
+## 💻 Quick Start
 
 ```bash
 cd coordinator
 npm install
 
-# Full end-to-end demo (recommended)
-npm run full-demo
-```
+# 1. Generate live on-chain traction (Arc Testnet)
+npm run traction
 
-### Video / Recording Mode (clean output)
-
-```bash
-# Cleaner, low-noise output + final structured JSON summary
-VIDEO=1 npm run full-demo
-
-# Or
-npm run full-demo -- --video
-```
-
-### Real Arc Testnet (recommended for submission)
-
-```bash
-USE_TESTNET=true \
-PRIVATE_KEY=0xYourPrivateKey \
-USDC_ADDRESS=0x... \
-npm run full-demo
-```
-
-This runs:
-- AI agents creating dynamic policies and EIP-712 signed bids
-- Hard constraint filtering + job-specific scoring across **API / Task / Compute** jobs
-- Independent verifier agent
-- Real on-chain escrow (`createEscrow` → attest → `release`/`slash`)
-- Live ERC-8004 reputation registration + pull that can influence which agent wins
-
-**Get test USDC:**
-- https://faucet.circle.com
-- or `npx @circle-fin/cli faucet --token USDC --amount 10 --network arc-testnet`
-
-## The Dashboard
-
-```bash
-cd coordinator
+# 2. Run the interactive server & dashboard
 npm run dev
 # Open http://localhost:8787
 ```
 
-A polished, self-contained interactive UI that visualizes the full negotiation flow. It powers the demo using real algorithm results.
+## 🏗 Project Structure
 
-## What You'll See
-
-When you run `full-demo` you get three complete rounds:
-
-| Job Type | Example Task                  | Key Scoring Factors          |
-|----------|-------------------------------|------------------------------|
-| API      | Fetch live price from Binance | Latency, uptime, reputation  |
-| Task     | Summarize + classify paper    | Confidence, capability, ETA  |
-| Compute  | Route LLM inference           | Capacity, uptime, latency    |
-
-Each round demonstrates:
-- Dynamic policy generation by a requester agent
-- Competitive bidding from multiple provider "personalities"
-- Constraint filtering + scoring
-- Verifier check
-- On-chain settlement
-
-## Project Structure
-
-```
+```text
 Ragent/
 ├── coordinator/
 │   ├── src/
-│   │   ├── agents/
-│   │   │   ├── llm-agent.ts      # Dynamic intents + personality bids (LLM or mock)
-│   │   │   └── verifier-agent.ts # Independent work verification
-│   │   ├── algo.ts               # Hard constraints + job-specific scoring
-│   │   ├── chain.ts              # viem, escrow, ERC-8004 integration
-│   │   ├── eip712.ts             # Bid signing + verification
-│   │   ├── schemas.ts
-│   │   └── server.ts             # Hono API + serves the dashboard
+│   │   ├── circle/             # ⬅️ THE TRUST LAYER
+│   │   │   ├── wallets.ts      # Provisions Circle Developer-Controlled Wallets
+│   │   │   ├── escrow.ts       # Executes releases/slashes via Circle API
+│   │   │   └── webhooks.ts     # Verifies HMAC-SHA256 Circle signatures
+│   │   ├── agents/             # AI policy & verifier agents
+│   │   ├── algo.ts             # Hard constraints + scoring
+│   │   ├── chain.ts            # viem + Arc ERC-8004 integration
+│   │   └── server.ts           # Hono API Coordinator
 │   ├── scripts/
-│   │   ├── full-demo.ts          # The main end-to-end story
-│   │   ├── test-algo.ts
-│   │   └── test-agents.ts
-│   └── public/index.html         # Self-contained dashboard
-├── contracts/                    # Foundry project
-│   ├── src/RagentEscrow.sol
-│   └── src/RagentRegistry.sol
-├── STATUS.md                     # Current detailed status (most up-to-date)
-├── PLAN.md                       # Original implementation plan
-├── System_Prompt
-└── inital_algo
+│   │   └── generate-traction.ts # Generates verifiable Arc transactions
+│   └── public/index.html       # Self-contained dashboard
+├── contracts/
+│   └── src/RagentSettlementLog.sol # Pure on-chain audit log (zero funds held)
+└── README.md
 ```
 
-## Main Commands (run from `coordinator/`)
-
-| Command                        | Purpose                                      |
-|--------------------------------|----------------------------------------------|
-| `npm run full-demo`            | Complete story (local by default)            |
-| `VIDEO=1 npm run full-demo`    | Clean mode for video recording + JSON output |
-| `npm run test-algo`            | Core algorithm tests                         |
-| `npm run test-agents`          | Agentic policy + bid generation              |
-| `npm run dev`                  | Start Hono server + dashboard (port 8787)    |
-| `npm start`                    | Run server once                              |
-| `npm run build`                | TypeScript check                             |
-
-## Architecture Highlights
-
-- **Agentic Sophistication**: Requesters LLM-generate dynamic `selection_policy` weights and constraints. Providers generate context-aware bids.
-- **Algorithm**: Strict hard constraints first, then normalized job-specific scoring (from the original `inital_algo` spec).
-- **Attestation**: Independent `verifier-agent` checks latency, hash, and content before on-chain attest.
-- **On-Chain**: `RagentEscrow` locks payment + staked penalty. `RagentRegistry` for events. Full ERC-8004 support (Identity + ReputationRegistry) with live reputation pulled into scoring on testnet.
-- **Signatures**: All bids are EIP-712 signed (strict mode by default in server).
-
-## Testnet Environment Variables
-
-Create `coordinator/.env` (or export):
+## 🔑 Environment Variables
+Create `.env` inside `coordinator/`:
 
 ```bash
 USE_TESTNET=true
-PRIVATE_KEY=0x...
-USDC_ADDRESS=0x...          # Real testnet USDC
-ARC_RPC=https://rpc.testnet.arc.network   # optional
+PRIVATE_KEY=0x...                  # Funded Arc Testnet Wallet
+USDC_ADDRESS=0x36000000...         # Arc Native USDC
+CIRCLE_API_KEY=TEST_API_KEY:...    # Circle API Key
+CIRCLE_WEBHOOK_SECRET=...          # Circle HMAC Signing Secret (optional)
 ```
 
-## Original Specs & Documentation
-
-- `System_Prompt` — vision, schemas, flow
-- `inital_algo` — exact constraints and scoring rules per job type
-- [STATUS.md](STATUS.md) — detailed current state + recent work
-- [PLAN.md](PLAN.md) — original approved plan
-
-## Tech
-
-- **Coordinator**: TypeScript, Hono, viem
-- **Agents**: OpenAI (with deterministic mocks when no key)
-- **Contracts**: Solidity + Foundry
-- **Chain**: Arc testnet (USDC gas + native stablecoin)
-- **Dashboard**: Single-file HTML (no separate frontend needed)
-
-## Hackathon Notes
-
-**Deadline**: July 6, 2026
-
-Strong emphasis on:
-- Real agentic behavior (not hardcoded)
-- On-chain effects (escrow movement + ERC-8004 reputation)
-- Clear, demonstrable story suitable for a short video
-
-Questions? Start with `STATUS.md`.
-
----
-
-Run `npm run full-demo` and you'll immediately see the heart of the system.
+## 💡 Tech Stack
+- **Custody & Escrow:** Circle Developer-Controlled Wallets, Circle Smart Contract Platform
+- **Blockchain:** Arc Testnet (USDC gas + native stablecoin), viem, Foundry
+- **Backend:** TypeScript, Hono
+- **AI:** OpenAI (deterministic fallbacks available)

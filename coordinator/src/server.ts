@@ -50,13 +50,6 @@ import type { Hex, Address } from 'viem';
 import { isCircleAvailable } from './circle/client.js';
 import { createAgentWallet, getAgentWallet } from './circle/wallets.js';
 import {
-  deployEscrowViaCircle,
-  createEscrowViaCircle,
-  attestViaCircle,
-  releaseViaCircle,
-  slashViaCircle,
-} from './circle/contracts.js';
-import {
   verifyCircleSignature,
   handleCircleWebhookEvent,
   getWebhookEventLog,
@@ -352,7 +345,7 @@ app.post('/select', async (c) => {
     try {
       const { walletId, walletAddress } = await createCircleEscrow({
         intentId:    intent_id,
-        requester:   intent.requester_address ?? 'unknown',
+        requester:   (intent as any).requester_address ?? 'unknown',
         provider:    winner.provider_address,
         priceUsdc,
         penaltyUsdc,
