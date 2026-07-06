@@ -7,11 +7,7 @@
   ],
   "functions": {
     "api/index.ts": {
-      "includeFiles": [
-        "artifacts/**",
-        "public/**",
-        "src/**"
-      ]
+      "includeFiles": "public/**"
     }
   }
 }
