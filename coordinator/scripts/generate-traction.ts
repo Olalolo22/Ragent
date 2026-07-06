@@ -1,63 +1,140 @@
+/**
+ * generate-traction.ts
+ *
+ * Generates 50+ real on-chain transactions on Arc Testnet by running
+ * complete negotiation cycles through RagentEscrow.
+ *
+ * Each cycle: approve → createEscrow → attest → release = 3 txs
+ * 20 cycles × 3 txs = 60 txs + 2 deploy txs = ~62 total
+ *
+ * Fix notes:
+ * - Single wallet used for both requester + provider (same key for demo)
+ * - Combined approve covers price + penalty in ONE call to avoid overwrite bug
+ * - 3s delay between cycles to avoid txpool congestion on Arc testnet
+ */
+
 import * as chain from '../src/chain';
-import { parseUnits, toHex, type Hex } from 'viem';
+import { parseUnits, toHex, keccak256, encodePacked, type Hex, type Address } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { setTimeout as sleep } from 'timers/promises';
 
 const USE_TESTNET = true;
 const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}` | undefined;
 
+// ERC20 approve ABI (works for Arc native USDC at 0x3600...)
+const approveAbi = [
+  {
+    name: 'approve',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount',  type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
 async function main() {
   if (!PRIVATE_KEY) {
-    console.error("❌ Missing PRIVATE_KEY. Please set it in your .env or environment.");
+    console.error('❌ Missing PRIVATE_KEY in .env');
     process.exit(1);
   }
-  if (!process.env.USDC_ADDRESS) {
-    console.error("❌ Missing USDC_ADDRESS. Make sure it's set in your environment.");
-    process.exit(1);
-  }
-  
+
   chain.configureTestnet(PRIVATE_KEY);
-  
-  console.log("\n🚀 Deploying RagentEscrow & Registry to Arc Testnet...");
+  const { walletClient, publicClient } = chain.getClients(USE_TESTNET);
+  const account = chain.getCurrentAccount();
+
+  console.log('\n🚀 Deploying RagentEscrow & Registry to Arc Testnet...');
   const contracts = await chain.deployContracts(USE_TESTNET);
-  
-  const provider = chain.getCurrentProviderAccount().address;
-  // We'll use tiny amounts for the loop: 0.1 USDC price, 0.05 USDC penalty
-  const price = parseUnits('0.1', 6); 
-  const penalty = parseUnits('0.05', 6); 
-  
-  const ITERATIONS = 12; // 12 cycles * 5 txs = 60 txs. Plus 2 for deploy = 62 txs total.
-  console.log(`\n🔥 Starting Traction Loop (${ITERATIONS} iterations) 🔥`);
-  console.log(`Expected Transactions: ~${ITERATIONS * 5 + 2}\n`);
-  
+
+  const USDC = contracts.usdc as Address;
+  const ESCROW = contracts.escrow as Address;
+
+  // For traction demo: requester and provider are same wallet
+  // We use a stable "provider" address (the wallet itself) for the escrow
+  const providerAddr = account.address;
+
+  // Amounts: 0.1 USDC price + 0.05 USDC penalty = 0.15 USDC total per cycle
+  const price   = parseUnits('0.1',  6); // 100000 micro-USDC
+  const penalty = parseUnits('0.05', 6); // 50000  micro-USDC
+  const total   = price + penalty;       // 150000 micro-USDC — what we approve in ONE call
+
+  const ITERATIONS = 20;
+  console.log(`\n🔥 Starting Traction Loop (${ITERATIONS} cycles × 3 txs = ${ITERATIONS * 3} txs + 2 deploy = ${ITERATIONS * 3 + 2} total)\n`);
+
+  let success = 0;
+  let failed  = 0;
+
   for (let i = 0; i < ITERATIONS; i++) {
     console.log(`\n--- Cycle ${i + 1} of ${ITERATIONS} ---`);
-    
-    // Use a unique 32-byte hex for each escrow/intent
-    const uniqueString = `ragent-traction-${Date.now()}-${i}`;
-    const intentId = toHex(uniqueString.padEnd(32, '0').slice(0, 32));
-    
+
+    // Unique 32-byte intent ID for this cycle
+    const intentId = keccak256(encodePacked(
+      ['string', 'uint256'],
+      [`ragent-traction-${Date.now()}`, BigInt(i)]
+    )) as Hex;
+
     try {
-      // 1. Create Escrow (This also does 2 USDC 'approve' txs behind the scenes)
-      console.log(`[1/3] Creating Escrow (Intent ID: ${intentId})...`);
-      await chain.createEscrow(contracts, intentId, provider, price, penalty, USE_TESTNET);
-      
-      // 2. Attest success
-      console.log(`[2/3] Attesting successful execution...`);
-      const proofHash = toHex(`proof-${Date.now()}`.padEnd(32, '0').slice(0, 32));
-      await chain.attest(contracts, intentId, true, proofHash, USE_TESTNET);
-      
-      // 3. Release funds
-      console.log(`[3/3] Releasing funds to provider...`);
-      await chain.release(contracts, intentId, USE_TESTNET);
-      
-      console.log(`✅ Cycle ${i + 1} complete.`);
+      // ── Step 1: Single combined approve (price + penalty) ─────────────────
+      // Because requester == provider (same wallet), we approve the total in
+      // ONE call. A second approve would overwrite the first, causing the
+      // "transfer amount exceeds allowance" revert we saw before.
+      console.log(`  [1/3] Approving ${total} micro-USDC to escrow...`);
+      const approveTx = await walletClient.writeContract({
+        address:      USDC,
+        abi:          approveAbi,
+        functionName: 'approve',
+        args:         [ESCROW, total],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveTx });
+      console.log(`  ✅ Approved. Tx: ${approveTx}`);
+
+      // ── Step 2: createEscrow ───────────────────────────────────────────────
+      console.log(`  [2/3] Creating Escrow...`);
+      const escrowTx = await chain.createEscrow(
+        contracts,
+        intentId,
+        providerAddr,
+        price,
+        penalty,
+        USE_TESTNET
+      );
+      console.log(`  ✅ Escrow created. Tx: ${escrowTx}`);
+
+      // ── Step 3: Attest + Release ───────────────────────────────────────────
+      const proofHash = keccak256(encodePacked(['string'], [`proof-${Date.now()}-${i}`])) as Hex;
+      console.log(`  [3/3] Attesting + Releasing...`);
+      const attestTx = await chain.attest(contracts, intentId, true, proofHash, USE_TESTNET);
+      const releaseTx = await chain.release(contracts, intentId, USE_TESTNET);
+      console.log(`  ✅ Attested: ${attestTx}`);
+      console.log(`  ✅ Released: ${releaseTx}`);
+      console.log(`  🏆 Cycle ${i + 1} complete!`);
+      success++;
+
     } catch (err: any) {
-      console.error(`❌ Cycle ${i + 1} failed:`, err.message);
-      // We continue to the next cycle even if one fails
+      console.error(`  ❌ Cycle ${i + 1} failed:`, err.shortMessage ?? err.message);
+      failed++;
+    }
+
+    // Brief pause between cycles to avoid txpool congestion
+    if (i < ITERATIONS - 1) {
+      console.log(`  ⏳ Waiting 3s before next cycle...`);
+      await sleep(3000);
     }
   }
-  
-  console.log("\n🎉 Traction generation complete!");
-  console.log(`Check your wallet address on ArcScan (https://testnet.arcscan.app/address/${chain.getCurrentAccount().address}) to see the wall of green!`);
+
+  const txCount = (success * 4) + 2; // 4 txs per successful cycle (approve + create + attest + release) + 2 deploys
+  console.log('\n═══════════════════════════════════════════════════════');
+  console.log(`🎉 TRACTION GENERATION COMPLETE`);
+  console.log(`   Successful cycles : ${success} / ${ITERATIONS}`);
+  console.log(`   Failed cycles     : ${failed}`);
+  console.log(`   Est. transactions : ~${txCount}`);
+  console.log(`\n   🔗 View your wallet on ArcScan:`);
+  console.log(`   https://testnet.arcscan.app/address/${account.address}`);
+  console.log(`\n   📜 View RagentEscrow contract:`);
+  console.log(`   https://testnet.arcscan.app/address/${ESCROW}`);
+  console.log('═══════════════════════════════════════════════════════\n');
 }
 
 main().catch(console.error);
