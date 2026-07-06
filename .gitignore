@@ -5,6 +5,7 @@ build/
 contracts/out/
 contracts/cache/
 coordinator/node_modules/
+coordinator/api/index.js
 .DS_Store
 inital_algo
 PLAN.md

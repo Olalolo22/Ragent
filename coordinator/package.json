@@ -12,7 +12,8 @@
     "test-algo": "tsx --env-file=.env scripts/test-algo.ts",
     "test-agents": "tsx --env-file=.env scripts/test-agents.ts",
     "full-demo": "tsx --env-file=.env scripts/full-demo.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "build:vercel": "esbuild api/handler.ts --bundle --platform=node --target=node20 --format=esm --outfile=api/index.js --packages=external"
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "1.2.1",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.5.0"
   }
 }
