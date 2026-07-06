@@ -27,29 +27,9 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import * as fs from 'fs';
-import { join, dirname } from 'path';
-
-// Robust artifact loading for both local dev and Vercel serverless.
-function loadArtifact(name: string) {
-  const candidates = [
-    join(process.cwd(), 'artifacts', name),                     // Vercel lambda root + normal
-    join(process.cwd(), 'coordinator/artifacts', name),         // repo root cwd case
-    join(process.cwd(), 'src/artifacts', name),                 // unlikely but
-  ].filter(Boolean) as string[];
-
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) {
-        return JSON.parse(fs.readFileSync(p, 'utf8'));
-      }
-    } catch (_) {}
-  }
-  throw new Error(`Could not find artifact ${name}. Tried: ${candidates.join(', ')}`);
-}
-
-const escrowArtifact = loadArtifact('RagentEscrow.json');
-const registryArtifact = loadArtifact('RagentRegistry.json');
-const mockUsdcArtifact = loadArtifact('MockUSDC.json');
+import escrowArtifact from '../artifacts/RagentEscrow.json';
+import registryArtifact from '../artifacts/RagentRegistry.json';
+import mockUsdcArtifact from '../artifacts/MockUSDC.json';
 
 const ANVIL_RPC = 'http://localhost:8545';
 const ARC_TESTNET_RPC = process.env.ARC_RPC || 'https://rpc.testnet.arc.network';

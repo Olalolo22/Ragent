@@ -35,10 +35,19 @@ if (!ENTITY_SECRET) {
  * Used to create agent wallets, check balances, and sign transactions
  * without ever holding a raw private key in application code.
  */
-export const walletsClient = CIRCLE_API_KEY && ENTITY_SECRET
-  ? initiateDeveloperControlledWalletsClient({
+export let walletsClient: ReturnType<typeof initiateDeveloperControlledWalletsClient> | null = null;
+export let isCircleAvailable = false;
+
+if (CIRCLE_API_KEY && ENTITY_SECRET) {
+  try {
+    walletsClient = initiateDeveloperControlledWalletsClient({
       apiKey:       CIRCLE_API_KEY,
       entitySecret: ENTITY_SECRET,
-    })
-  : null;
-export const isCircleAvailable = !!(CIRCLE_API_KEY && ENTITY_SECRET);
+    });
+    isCircleAvailable = true;
+  } catch (err: any) {
+    console.error('[Circle] Failed to initialize client (bad keys?):', err?.message || err);
+    walletsClient = null;
+    isCircleAvailable = false;
+  }
+}

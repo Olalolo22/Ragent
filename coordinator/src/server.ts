@@ -21,7 +21,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
+
 import {
   Intent,
   Bid,
@@ -152,37 +152,16 @@ app.use('*', cors({
 // ---------------------------------------------------------------------------
 // Serve static files from public/ (the dashboard)
 // ---------------------------------------------------------------------------
-// Robust path resolution for both local (tsx) and Vercel serverless.
-// includeFiles in vercel.json ensures public/** is present at function root.
 app.get('/public/index.html', (c) => {
-  let candidates: string[] = [];
-  try {
-    candidates = [
-      // Best for Vercel (included files are at process.cwd() root of the lambda)
-      path.join(process.cwd(), 'public', 'index.html'),
-      // ESM import.meta (works in dev, may be transformed in bundle)
-      path.join(fileURLToPath(new URL('../public/index.html', import.meta.url))),
-    ];
-  } catch {
-    candidates = [path.join(process.cwd(), 'public', 'index.html')];
-  }
-
-  let html: string | null = null;
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) {
-        html = fs.readFileSync(p, 'utf8');
-        break;
-      }
-    } catch (_) {}
-  }
-
-  if (html) {
+  const p = path.join(process.cwd(), 'public', 'index.html');
+  
+  if (fs.existsSync(p)) {
+    const html = fs.readFileSync(p, 'utf8');
     return c.html(html);
   }
 
-  console.error('[server] Could not find public/index.html. Tried:', candidates);
-  return c.text('Dashboard not found. Tried paths: ' + candidates.join(' | '), 404);
+  console.error('[server] Could not find public/index.html at:', p);
+  return c.text('Dashboard not found. Tried path: ' + p, 404);
 });
 
 // ---------------------------------------------------------------------------
