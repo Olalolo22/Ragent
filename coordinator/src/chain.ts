@@ -27,11 +27,29 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import * as fs from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { join, dirname } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Robust artifact loading for both local dev and Vercel serverless.
+function loadArtifact(name: string) {
+  const candidates = [
+    join(process.cwd(), 'artifacts', name),                     // Vercel lambda root + normal
+    join(process.cwd(), 'coordinator/artifacts', name),         // repo root cwd case
+    join(process.cwd(), 'src/artifacts', name),                 // unlikely but
+  ].filter(Boolean) as string[];
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        return JSON.parse(fs.readFileSync(p, 'utf8'));
+      }
+    } catch (_) {}
+  }
+  throw new Error(`Could not find artifact ${name}. Tried: ${candidates.join(', ')}`);
+}
+
+const escrowArtifact = loadArtifact('RagentEscrow.json');
+const registryArtifact = loadArtifact('RagentRegistry.json');
+const mockUsdcArtifact = loadArtifact('MockUSDC.json');
 
 const ANVIL_RPC = 'http://localhost:8545';
 const ARC_TESTNET_RPC = process.env.ARC_RPC || 'https://rpc.testnet.arc.network';
@@ -96,11 +114,7 @@ export const publicClient: PublicClient = createPublicClient({ chain: anvilChain
 export const walletClient: WalletClient = createWalletClient({ account: currentAccount, chain: anvilChain, transport: http(ANVIL_RPC) });
 export const providerWallet: WalletClient = createWalletClient({ account: currentProviderAccount, chain: anvilChain, transport: http(ANVIL_RPC) });
 
-// Load artifacts (bytecode is the raw 0x... string now)
-const escrowArtifact = JSON.parse(fs.readFileSync(join(__dirname, '../artifacts/RagentEscrow.json'), 'utf8'));
-const registryArtifact = JSON.parse(fs.readFileSync(join(__dirname, '../artifacts/RagentRegistry.json'), 'utf8'));
-const mockUsdcArtifact = JSON.parse(fs.readFileSync(join(__dirname, '../artifacts/MockUSDC.json'), 'utf8'));
-
+// Artifacts are now statically imported at top of file (see imports).
 // ERC-8004 on Arc Testnet (from official docs)
 const IDENTITY_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e' as const;
 const REPUTATION_REGISTRY = '0x8004B663056A597Dffe9eCcC1965A193B7388713' as const;
