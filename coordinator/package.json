@@ -6,13 +6,15 @@
   "scripts": {
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
-    "demo": "tsx scripts/demo.ts",
+    "demo": "tsx scripts/full-demo.ts",
     "test-algo": "tsx scripts/test-algo.ts",
     "test-agents": "tsx scripts/test-agents.ts",
     "full-demo": "tsx scripts/full-demo.ts",
     "build": "tsc"
   },
   "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.8.0",
+    "@circle-fin/smart-contract-platform": "^10.8.0",
     "@hono/node-server": "^2.0.8",
     "hono": "^4.5.0",
     "viem": "^2.21.0"
