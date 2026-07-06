@@ -603,10 +603,12 @@ export default app;
 // ---------------------------------------------------------------------------
 // Start server (tsx / Node)
 // ---------------------------------------------------------------------------
-const mode = USE_TESTNET ? '🌐 Arc Testnet' : '🔧 Local Anvil';
-console.log(`\n🚀 Ragent Coordinator — ${mode}`);
-console.log(`   Listening on http://localhost:${PORT}`);
-console.log(`   STRICT_SIGNATURES=${STRICT_SIGNATURES}`);
-console.log(`   Contracts deploy lazily on first /select\n`);
+if (!process.env.VERCEL) {
+  const mode = USE_TESTNET ? '🌐 Arc Testnet' : '🔧 Local Anvil';
+  console.log(`\n🚀 Ragent Coordinator — ${mode}`);
+  console.log(`   Listening on http://localhost:${PORT}`);
+  console.log(`   STRICT_SIGNATURES=${STRICT_SIGNATURES}`);
+  console.log(`   Contracts deploy lazily on first /select\n`);
 
-serve({ fetch: app.fetch, port: PORT });
+  serve({ fetch: app.fetch, port: PORT });
+}
