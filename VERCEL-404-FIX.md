@@ -12,9 +12,9 @@ The browser request you showed (plain GET `/` → 404 from Vercel, no content) c
 ## What I Changed (no builds/tests run)
 1. Restored the standard, proven Vercel Hono pattern:
    - `coordinator/api/index.ts` (default export + `handle(app)`)
-   - `coordinator/vercel.json` now has the classic rewrite for `/api/*` + explicit `"outputDirectory": "public"`
+   - `coordinator/vercel.json` has headers + rewrites for `/` (to index.html) and `/api/*`
 
-2. Added a top-level `vercel.json` (at Ragent root) with a rewrite that forces `/` → the dashboard HTML file inside `coordinator/public/`. This makes the landing page appear **even if** Root Directory is still set to the repo root.
+2. Rely on Vercel's default static behavior: contents of `public/` are served from the site root when Root Directory = `coordinator`. No `outputDirectory` (that was causing the "no entrypoint" error).
 
 3. Left `coordinator/api/[...route].ts` in place (harmless; `index.ts` takes precedence for the classic handler).
 
@@ -61,15 +61,59 @@ In Vercel project settings:
 - Environment Variables: make sure any needed ones (USE_TESTNET, etc.) are present for previews (or mark them as "Preview" + "Production").
 - If you previously had "Output Directory" manually set at project level, clear it (let `vercel.json` control it).
 
-## Files touched
-- `coordinator/api/index.ts` (new - standard entry)
-- `coordinator/vercel.json` (added rewrites + outputDirectory)
-- `vercel.json` (new at repo root - fallback for `/`)
+## Files touched (cumulative)
+- `coordinator/api/index.ts`
+- `coordinator/vercel.json` (headers + rewrites for `/` and `/api/*`, buildCommand skip, **no outputDirectory**)
+- `vercel.json` (root - minimal)
+- `coordinator/src/agents/llm-agent.ts` (import fix)
+- `coordinator/tsconfig.json` (include cleanup)
 - This doc: `VERCEL-404-FIX.md`
 
 After the Root Directory change + redeploy, the 404 on the root should be gone and the demo UI should load.
 
 If you still get errors (500/404 on the API calls inside the demo), paste the new Vercel function logs here.
+
+---
+
+## Latest Error: "No entrypoint found in output directory: 'public'"
+
+**Symptom from your log:**
+```
+build skipped — Vercel handles TypeScript api/ routes + static public/ directly
+Error: No entrypoint found in output directory: "public".
+Searched for: app.{js...}, index.{js...}, server.{js...} ...
+```
+
+### Why this happened
+Setting `"outputDirectory": "public"` in vercel.json tells Vercel "treat `public/` as the *entire built app output*".
+
+Vercel then looks inside it for a server entrypoint (Next.js style, SSR, etc.). It doesn't find `server.js` / `index.js` etc. because `public/` only has your static `index.html`.
+
+This is wrong for a mixed static + `api/` functions project.
+
+### Fix applied
+- Removed `"outputDirectory": "public"` completely.
+- Added explicit rewrite so `/` → `/index.html` (your dashboard).
+- `public/index.html` will now be served at the root by Vercel's normal static rules (`public/` contents → site root).
+- Kept the `buildCommand` echo (so `tsc` stays skipped).
+- Cleaned up the root `vercel.json` so it doesn't interfere when Root Directory = `coordinator`.
+
+### Why the previous outputDirectory seemed like a good idea
+It was an attempt to force static serving, but it backfired. For plain `api/` + `public/` (no framework preset), you should **not** set outputDirectory, or only set it if you actually build into a dist folder.
+
+### What you must do
+1. Make sure **Root Directory** is still set to exactly `coordinator` in Vercel project settings.
+2. Push the fix:
+   ```bash
+   git add -A
+   git commit -m "fix(vercel): remove bad outputDirectory + add / -> /index.html rewrite + clean root vercel.json"
+   git push origin fix/vercel-500-errors
+   ```
+3. Redeploy the preview.
+4. Hard refresh / incognito.
+
+`/ ` should now serve the full styled dashboard from `public/index.html`.
+`/api/demo/run` etc. should still work via the rewrite + hono/vercel handler.
 
 ---
 
@@ -102,22 +146,7 @@ Running "npm run build"
 
 4. Root `vercel.json` also has a safe no-op buildCommand.
 
-### What to do now
-- The changes are already in the branch.
-- Push with a clear message (you can use this or your own):
-  ```bash
-  git add -A
-  git commit -m "fix(vercel): add buildCommand to skip tsc + fix imports + clean tsconfig + public output + root rewrite for 404/build"
-  git push origin fix/vercel-500-errors
-  ```
-- In Vercel you should now see the build step run the `echo` instead of `tsc`.
-- After that, the 404 fix (Root Directory + rewrites + outputDirectory) + build skip should take effect.
+### What to do now (older tsc section)
+See the **new section at the top** ("Latest Error: No entrypoint...") for the current correct push command and instructions.
 
-If the build now passes but you still get 404 on `/` or API 404s, re-confirm:
-- Root Directory is set to `coordinator`
-- Check the "Build Logs" and "Function Logs" tabs for the new deployment.
-
-You can also manually set an Environment Variable in Vercel if you want to be extra sure:
-  - Key: `VERCEL_BUILD_COMMAND` (not usually needed, the vercel.json takes precedence).
-
-This should get the site building and serving again.
+The key recent change was removing `"outputDirectory": "public"`. The push example in the top section is the one to use.

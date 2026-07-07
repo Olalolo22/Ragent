@@ -148,13 +148,13 @@ app.use('*', async (c, next) => {
 // CORS is handled natively by vercel.json to avoid Node runtime adapter bugs
 
 // ---------------------------------------------------------------------------
-// GET /  (under basePath this becomes the effective root for /api when rewrites collapse)
-// Provides a minimal landing if static /index.html is not being served by Vercel.
-// The real dashboard lives in public/index.html and is served via outputDirectory or root rewrite.
+// GET /  (under basePath → effective root when the api function handles a collapsed path)
+// This is only a fallback. The real fancy dashboard is served as static from public/index.html
+// (via the "/" rewrite to "/index.html" in vercel.json + Vercel's normal public/ behavior).
 // ---------------------------------------------------------------------------
 app.get('/', (c) => {
   return c.html(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ragent</title><style>body{font-family:ui-monospace,monospace;background:#060608;color:#f0f0ff;padding:40px;line-height:1.5} a{color:#7c3aed}</style></head><body><h1>Ragent — coordinator</h1><p>Static dashboard (the full fancy UI) should be at <a href="/">/</a> or <a href="/index.html">/index.html</a>.</p><p>If you landed here, either static assets are not mounted or Root Directory is not set to <code>coordinator</code> in Vercel project settings.</p><ul><li><a href="/api/health">/api/health</a></li><li><a href="/api/demo/run?job_type=api">/api/demo/run?job_type=api</a> (JSON)</li></ul><p>See VERCEL-404-FIX.md in the repo root for exact settings + redeploy steps.</p></body></html>`
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ragent</title><style>body{font-family:ui-monospace,monospace;background:#060608;color:#f0f0ff;padding:40px;line-height:1.5} a{color:#7c3aed}</style></head><body><h1>Ragent — coordinator</h1><p>The full styled dashboard should load at <a href="/">/</a> or <a href="/index.html">/index.html</a> from static public/index.html.</p><p>If you see this page: check that Root Directory="coordinator" and the latest vercel.json (no outputDirectory) is deployed.</p><ul><li><a href="/api/health">/api/health</a></li><li><a href="/api/demo/run?job_type=api">/api/demo/run?job_type=api</a> (JSON)</li></ul><p>See VERCEL-404-FIX.md at repo root.</p></body></html>`
   );
 });
 

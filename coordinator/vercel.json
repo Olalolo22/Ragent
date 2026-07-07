@@ -12,8 +12,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/", "destination": "/index.html" },
     { "source": "/api/(.*)", "destination": "/api" }
   ],
-  "outputDirectory": "public",
   "buildCommand": "echo 'build skipped — Vercel handles TypeScript api/ routes + static public/ directly'"
 }
