@@ -132,11 +132,7 @@ async function getContracts(): Promise<DeployedContracts> {
   return deployedContracts;
 }
 
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
-
-const app = new Hono().basePath('/api');
+const app = new Hono();
 
 // ---------------------------------------------------------------------------
 // Security headers middleware (CSP, clickjacking, sniff protection)
