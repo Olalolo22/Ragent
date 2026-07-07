@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/server.ts",
-    "dev": "tsx watch --env-file=.env src/server.ts",
+    "start": "tsx scripts/dev-server.ts",
+    "dev": "tsx watch --env-file=.env scripts/dev-server.ts",
     "demo": "tsx --env-file=.env scripts/full-demo.ts",
     "traction": "tsx --env-file=.env scripts/generate-traction.ts",
     "compile:contracts": "cd ../contracts && forge build",

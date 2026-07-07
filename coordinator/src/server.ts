@@ -19,8 +19,6 @@
 
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
-import * as fs from 'fs';
-import * as path from 'path';
 
 import {
   Intent,
@@ -44,6 +42,10 @@ import {
 import { verifyBidSignature } from './eip712.js';
 import { verifyWork } from './agents/verifier-agent.js';
 import type { Hex, Address } from 'viem';
+
+// Ensure these are bundled natively on Vercel
+import * as llmAgent from './agents/llm-agent.js';
+import * as algo from './algo.js';
 
 // ── Circle Trust Layer (optional — used when CIRCLE_API_KEY is set) ──────────
 import { isCircleAvailable } from './circle/client.js';
@@ -186,11 +188,11 @@ app.get('/demo/run', async (c) => {
     return c.json({ error: 'job_type must be api, task, or compute' }, 400);
   }
 
-  // Inline mock data so the endpoint has no side-effects on server state
+// Static imports moved to top of file
   const { generateDynamicIntent, generateTaskIntent, generateComputeIntent,
           generateBid, getMockPersonalities, getTaskPersonalities, getComputePersonalities
-        } = await import('./agents/llm-agent.js');
-  const { selectWinner, passesConstraints, scoreAndExplain } = await import('./algo.js');
+        } = await Promise.resolve(llmAgent);
+  const { selectWinner, passesConstraints, scoreAndExplain } = await Promise.resolve(algo);
 
   const intentFns: Record<string, () => Promise<any>> = {
     api:     () => generateDynamicIntent('Fetch USDC/ETH price from Binance API', { symbol: 'ETHUSDC' }),
@@ -593,23 +595,6 @@ app.get('/circle/status', (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Export for testing / Bun / Vercel adapter
+// Export for testing / Bun / Vercel Edge adapter
 // ---------------------------------------------------------------------------
 export default app;
-
-// ---------------------------------------------------------------------------
-// Start server (tsx / Node) — skipped on Vercel (uses hono/vercel adapter)
-// ---------------------------------------------------------------------------
-if (!process.env.VERCEL) {
-  // Dynamic import (IIFE) so no top-level await and we don't pull node-server into Vercel bundle
-  (async () => {
-    const { serve } = await import('@hono/node-server');
-    const mode = USE_TESTNET ? '🌐 Arc Testnet' : '🔧 Local Anvil';
-    console.log(`\n🚀 Ragent Coordinator — ${mode}`);
-    console.log(`   Listening on http://localhost:${PORT}`);
-    console.log(`   STRICT_SIGNATURES=${STRICT_SIGNATURES}`);
-    console.log(`   Contracts deploy lazily on first /select\n`);
-
-    serve({ fetch: app.fetch, port: PORT });
-  })();
-}
