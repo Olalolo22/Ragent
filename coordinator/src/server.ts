@@ -82,6 +82,7 @@ try {
   console.error('[Coordinator] Failed to load public/index.html for fallback serving:', err);
 }
 
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -132,7 +133,7 @@ async function getContracts(): Promise<DeployedContracts> {
   return deployedContracts;
 }
 
-const app = new Hono();
+const app = new Hono().basePath('/api');
 
 // ---------------------------------------------------------------------------
 // Security headers middleware (CSP, clickjacking, sniff protection)

@@ -927,7 +927,7 @@ auction.classList.remove('visible');
 setStep(0);
 
 try {
-  const res = await fetch('/demo/run?job_type=' + selectedJob);
+  const res = await fetch('/api/demo/run?job_type=' + selectedJob);
   const data = await res.json();
   
   intentId.textContent = `${data.intent.intent_id.split('-')[0]}... · ${data.job_type} job`;
