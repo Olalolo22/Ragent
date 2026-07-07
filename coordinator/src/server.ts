@@ -18,7 +18,7 @@
  */
 
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -143,11 +143,7 @@ app.use('*', async (c, next) => {
   c.res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 });
 
-app.use('*', cors({ 
-  origin: (origin) => origin ?? '*', 
-  allowMethods: ['GET', 'POST'],
-  allowHeaders: ['Content-Type', 'x-circle-signature'],
-}));
+// CORS is handled natively by vercel.json to avoid Node runtime adapter bugs
 
 // ---------------------------------------------------------------------------
 // GET /  — basic landing (the full fancy dashboard is at /index.html)
