@@ -17,7 +17,11 @@ const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
 let openai: OpenAI | null = null;
 if (OPENAI_KEY) {
-  openai = new OpenAI({ apiKey: OPENAI_KEY });
+  openai = new OpenAI({ 
+    apiKey: OPENAI_KEY,
+    timeout: 1500,
+    maxRetries: 0
+  });
 }
 
 export interface AgentPersonality {
@@ -105,7 +109,7 @@ Rules:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4,
       max_tokens: 300,
-    }, { timeout: 2000, maxRetries: 0 });
+    });
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
@@ -281,7 +285,7 @@ Guidelines:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.5,
       max_tokens: 150,
-    }, { timeout: 2000, maxRetries: 0 });
+    });
 
     const text = completion.choices[0]?.message?.content || '{}';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
