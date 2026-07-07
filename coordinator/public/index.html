@@ -870,12 +870,7 @@ el.classList.toggle('done', i < current);
 }
 
 /* ── AGENTS DATA ── */
-const AGENTS = [
-{ id:'42', name:'NexusAPI', rep:0.92, latency:480, price:0.04, uptime:0.999, stake:0.75, valid:true, score:0.847 },
-{ id:'43', name:'SwiftOracle', rep:0.85, latency:650, price:0.03, uptime:0.990, stake:0.50, valid:true, score:0.791 },
-{ id:'44', name:'DataPulse', rep:0.78, latency:920, price:0.02, uptime:0.970, stake:0.30, valid:false, score:0, reject:'latency > 800ms' },
-{ id:'45', name:'VeritasNet', rep:0.55, latency:340, price:0.015, uptime:0.940, stake:0.20, valid:false, score:0, reject:'rep < 0.6' },
-];
+let AGENTS = [];
 
 function renderAgents(showScores, winnerId) {
 const container = document.getElementById('agent-rows');
@@ -890,8 +885,8 @@ const scoreWidth = showScores && a.valid ? a.score * 100 : 0;
 row.innerHTML = `
 <div class="agent-name"><span class="agent-dot" style="background:${dotColor}"></span>${a.name}</div>
 <span class="mono hi">$${a.price.toFixed(3)}</span>
-<span class="mono" style="color:${a.latency<700?'var(--green)':'var(--text-2)'}">${a.latency}ms</span>
-<span class="mono" style="color:${a.rep>0.85?'var(--green)':a.rep<0.6?'var(--red)':'var(--text-2)'}">${a.rep}</span>
+<span class="mono" style="color:${a.latency<700?'var(--green)':'var(--text-2)'}">${a.latencyStr}</span>
+<span class="mono" style="color:${a.rep>0.85?'var(--green)':a.rep<0.6?'var(--red)':'var(--text-2)'}">${a.rep.toFixed(2)}</span>
 <span class="mono">${(a.uptime*100).toFixed(1)}%</span>
 <div class="score-bar-wrap">
 ${a.valid ? `
@@ -907,7 +902,7 @@ container.appendChild(row);
 
 /* ── NEGOTIATION ── */
 let running = false;
-function runNegotiation() {
+async function runNegotiation() {
 if (running) return;
 running = true;
 const btn = document.getElementById('run-btn');
@@ -919,37 +914,89 @@ const status = document.getElementById('auction-status');
 const winnerStrip = document.getElementById('winner-strip');
 const intentId = document.getElementById('intent-id');
 
-const intentNum = Math.floor(Math.random() * 900) + 90;
-intentId.textContent = `intent-${intentNum} · ${selectedJob} job`;
-
 winnerStrip.style.display = 'none';
 status.className = 'badge badge-amber';
 status.textContent = 'Bidding';
-auction.classList.add('visible');
-renderAgents(false, null);
+auction.classList.remove('visible');
 setStep(0);
 
-const timeline = [
-[600, () => { setStep(1); renderAgents(false, null); }],
-[1300, () => { setStep(2); }],
-[2000, () => { setStep(3); renderAgents(true, null); }],
-[3000, () => { setStep(4); renderAgents(true, '42'); status.className='badge badge-green'; status.textContent='Winner Selected'; }],
-[3800, () => {
-setStep(5);
-document.getElementById('winner-detail').textContent = 'NexusAPI · 0.04 USDC · 480ms · rep 0.92';
-document.getElementById('stake-val').textContent = '0.75 USDC';
-winnerStrip.style.display = 'flex';
-}],
-[4800, () => {
-setStep(6);
-status.className='badge badge-cyan'; status.textContent='Settled';
-btn.disabled = false;
-btn.textContent = '▶ Run Again';
-running = false;
-}],
-];
+try {
+  const res = await fetch('/demo/run?job_type=' + selectedJob);
+  const data = await res.json();
+  
+  intentId.textContent = `${data.intent.intent_id.split('-')[0]}... · ${data.job_type} job`;
+  
+  AGENTS = data.providers.map(p => {
+    const terms = p.bid.terms;
+    let latencyVal = 0, latencyStr = '—';
+    if (terms.latency_ms) { latencyVal = terms.latency_ms; latencyStr = terms.latency_ms + 'ms'; }
+    else if (terms.eta_seconds) { latencyVal = terms.eta_seconds * 1000; latencyStr = terms.eta_seconds + 's eta'; }
+    else if (terms.capacity) { latencyVal = 0; latencyStr = terms.capacity + ' cap'; }
+    
+    return {
+      id: p.bid.bid_id,
+      name: p.name,
+      rep: terms.reputation ?? 0.5,
+      latency: latencyVal,
+      latencyStr,
+      price: terms.price_usdc,
+      uptime: terms.uptime ?? 1.0,
+      stake: p.bid.staked_penalty_usdc,
+      valid: p.passes_constraints,
+      score: p.score ?? 0,
+      reject: p.passes_constraints ? null : 'ELIMINATED'
+    };
+  });
 
-for (const [delay, fn] of timeline) setTimeout(fn, delay);
+  const winnerId = data.winner ? data.winner.bid_id : null;
+  
+  auction.classList.add('visible');
+  renderAgents(false, null);
+  
+  const timeline = [
+    [600, () => { setStep(1); renderAgents(false, null); }],
+    [1300, () => { setStep(2); }],
+    [2000, () => { setStep(3); renderAgents(true, null); }],
+    [3000, () => { 
+      setStep(4); 
+      renderAgents(true, winnerId); 
+      if (winnerId) {
+        status.className='badge badge-green'; status.textContent='Winner Selected'; 
+      } else {
+        status.className='badge badge-red'; status.textContent='No Valid Bids'; 
+      }
+    }],
+    [3800, () => {
+      if (!winnerId) return;
+      setStep(5);
+      const w = AGENTS.find(a => a.id === winnerId);
+      document.getElementById('winner-detail').textContent = `${w.name} · $${w.price} USDC · ${w.latencyStr} · rep ${w.rep.toFixed(2)}`;
+      document.getElementById('stake-val').textContent = `${w.stake} USDC`;
+      winnerStrip.style.display = 'flex';
+    }],
+    [4800, () => {
+      setStep(6);
+      if (winnerId) {
+        status.className='badge badge-cyan'; status.textContent='Settled';
+      }
+    }],
+  ];
+
+  for (const [delay, fn] of timeline) setTimeout(fn, delay);
+  
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = '▶ Run Again';
+    running = false;
+  }, 5000);
+
+} catch (err) {
+  console.error(err);
+  btn.disabled = false;
+  btn.textContent = '▶ Run Again';
+  running = false;
+  alert('Error connecting to API. Is the coordinator running?');
+}
 }
 
 /* ── SCROLL REVEAL ── */
