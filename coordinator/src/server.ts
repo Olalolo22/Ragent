@@ -118,7 +118,7 @@ async function getContracts(): Promise<DeployedContracts> {
 // App
 // ---------------------------------------------------------------------------
 
-const app = new Hono();
+const app = new Hono().basePath('/api');
 
 // ---------------------------------------------------------------------------
 // Security headers middleware (CSP, clickjacking, sniff protection)
@@ -149,18 +149,7 @@ app.use('*', async (c, next) => {
 
 // ---------------------------------------------------------------------------
 // GET /  — basic landing (the full fancy dashboard is at /index.html)
-// ---------------------------------------------------------------------------
-app.get('/', (c) => {
-  return c.html(`
-    <!doctype html>
-    <html><head><meta charset="utf-8"><title>Ragent Coordinator</title></head>
-    <body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
-      <h1>Ragent Coordinator is up</h1>
-      <p>API is running. Try <a href="/health" style="color:#7c3aed">/health</a> or the full demo UI at <a href="/index.html" style="color:#7c3aed">/index.html</a>.</p>
-      <p>If the dashboard 404s, the API endpoints still work.</p>
-    </body></html>
-  `);
-});
+
 
 // ---------------------------------------------------------------------------
 // GET /health
