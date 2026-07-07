@@ -19,6 +19,9 @@
 
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 import {
   Intent,
@@ -63,6 +66,21 @@ import {
   getCircleEscrow,
   getAllCircleEscrows,
 } from './circle/escrow.js';
+
+// ---------------------------------------------------------------------------
+// Serve the full dashboard HTML (packaged via includeFiles in vercel.json)
+// This lets the Hono handler serve the nice UI reliably as a fallback.
+// ---------------------------------------------------------------------------
+let dashboardHtml = '<h1>Ragent</h1><p>Dashboard could not be loaded.</p>';
+try {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  // When the function runs, public/index.html is included next to the bundled handler
+  const htmlPath = join(__dirname, '../public/index.html');
+  dashboardHtml = readFileSync(htmlPath, 'utf-8');
+} catch (err) {
+  console.error('[Coordinator] Failed to load public/index.html for fallback serving:', err);
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -153,9 +171,8 @@ app.use('*', async (c, next) => {
 // (via the "/" rewrite to "/index.html" in vercel.json + Vercel's normal public/ behavior).
 // ---------------------------------------------------------------------------
 app.get('/', (c) => {
-  return c.html(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ragent</title><style>body{font-family:ui-monospace,monospace;background:#060608;color:#f0f0ff;padding:40px;line-height:1.5} a{color:#7c3aed}</style></head><body><h1>Ragent — coordinator</h1><p>The full styled dashboard should load at <a href="/">/</a> or <a href="/index.html">/index.html</a> from static public/index.html.</p><p>If you see this page: check that Root Directory="coordinator" and the latest vercel.json (no outputDirectory) is deployed.</p><ul><li><a href="/api/health">/api/health</a></li><li><a href="/api/demo/run?job_type=api">/api/demo/run?job_type=api</a> (JSON)</li></ul><p>See VERCEL-404-FIX.md at repo root.</p></body></html>`
-  );
+  // Serve the full fancy self-contained dashboard
+  return c.html(dashboardHtml);
 });
 
 // ---------------------------------------------------------------------------
