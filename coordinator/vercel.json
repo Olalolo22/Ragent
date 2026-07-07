@@ -12,11 +12,10 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/", "destination": "/api" }
   ],
   "functions": {
-    "api/index.ts": {
+    "api/[[...route]].ts": {
       "includeFiles": "public/index.html"
     }
   },
