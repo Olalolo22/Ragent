@@ -1,14 +1,8 @@
 {
-  "buildCommand": "npm run build:vercel",
   "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/api/index"
     }
-  ],
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "public/**"
-    }
-  }
+  ]
 }

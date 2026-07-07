@@ -150,22 +150,7 @@ app.use('*', cors({
 }));
 
 // ---------------------------------------------------------------------------
-// Serve static files from public/ (the dashboard)
-// ---------------------------------------------------------------------------
-app.get('/public/index.html', (c) => {
-  const p = path.join(process.cwd(), 'public', 'index.html');
-  
-  if (fs.existsSync(p)) {
-    const html = fs.readFileSync(p, 'utf8');
-    return c.html(html);
-  }
-
-  console.error('[server] Could not find public/index.html at:', p);
-  return c.text('Dashboard not found. Tried path: ' + p, 404);
-});
-
-// ---------------------------------------------------------------------------
-// GET /  — basic landing (the full fancy dashboard is at /public/index.html)
+// GET /  — basic landing (the full fancy dashboard is at /index.html)
 // ---------------------------------------------------------------------------
 app.get('/', (c) => {
   return c.html(`
@@ -173,7 +158,7 @@ app.get('/', (c) => {
     <html><head><meta charset="utf-8"><title>Ragent Coordinator</title></head>
     <body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
       <h1>Ragent Coordinator is up</h1>
-      <p>API is running. Try <a href="/health" style="color:#7c3aed">/health</a> or the full demo UI at <a href="/public/index.html" style="color:#7c3aed">/public/index.html</a>.</p>
+      <p>API is running. Try <a href="/health" style="color:#7c3aed">/health</a> or the full demo UI at <a href="/index.html" style="color:#7c3aed">/index.html</a>.</p>
       <p>If the dashboard 404s, the API endpoints still work.</p>
     </body></html>
   `);
