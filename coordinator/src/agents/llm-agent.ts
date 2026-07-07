@@ -247,21 +247,29 @@ export async function generateBid(
 
   // LLM bid generation (shows agent deciding its offer)
   const policySummary = JSON.stringify(intent.selection_policy);
+  
+  let jobSpecificFields = `"latency_ms": NNN,`;
+  if (intent.job_type === 'task') {
+    jobSpecificFields = `"eta_seconds": NNN,\n  "confidence": 0.NN,`;
+  } else if (intent.job_type === 'compute') {
+    jobSpecificFields = `"latency_ms": NNN,\n  "capacity": 0.NN,\n  "uptime": 0.NN,`;
+  }
+
   const prompt = `You are an autonomous provider agent named ${personality.name} (${personality.style}).
-An Intent just arrived for an API job.
+An Intent just arrived for a ${intent.job_type} job.
 
 Intent policy: ${policySummary}
 
 Decide your SLA Bid terms. Return ONLY JSON:
 {
   "price_usdc": 0.0NN,
-  "latency_ms": NNN,
+  ${jobSpecificFields}
   "staked_penalty_usdc": 0.NN
 }
 
 Guidelines:
-- Match the personality: fast-and-cheap bids lower price + higher latency; reliable-premium bids better latency + higher stake.
-- Never exceed the intent's max_price_usdc or max_latency_ms if visible.
+- Match the personality: fast-and-cheap bids lower price + higher latency; reliable-premium bids better SLA + higher stake.
+- Never exceed the intent's max constraints if visible.
 - Stake should be 5-20x the price.
 `;
 
@@ -276,18 +284,31 @@ Guidelines:
     const text = completion.choices[0]?.message?.content || '{}';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
 
+    const terms: any = {
+      price_usdc: parsed.price_usdc,
+      reputation: 0.82 + Math.random() * 0.12,
+    };
+
+    if (intent.job_type === 'api') {
+      terms.latency_ms = parsed.latency_ms;
+      terms.api_access = ['binance-price'];
+      terms.uptime = 0.97;
+    } else if (intent.job_type === 'task') {
+      terms.eta_seconds = parsed.eta_seconds;
+      terms.confidence = parsed.confidence;
+      terms.capability_tags = ['nlp', 'summarize', 'classify', 'domain-expert'];
+    } else if (intent.job_type === 'compute') {
+      terms.latency_ms = parsed.latency_ms;
+      terms.capacity = parsed.capacity;
+      terms.uptime = parsed.uptime || 0.97;
+    }
+
     return {
       bid_id: bidId,
       intent_id: intent.intent_id,
       provider_address: providerAddress,
       agent_id: agentId,
-      terms: {
-        price_usdc: parsed.price_usdc,
-        latency_ms: parsed.latency_ms,
-        api_access: ['binance-price'],
-        reputation: 0.82 + Math.random() * 0.12,
-        uptime: 0.97,
-      },
+      terms,
       staked_penalty_usdc: parsed.staked_penalty_usdc,
     };
   } catch {
