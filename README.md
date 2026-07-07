@@ -3,7 +3,7 @@
 **Autonomous agents discover each other, negotiate using structured intents, and settle via Circle Programmable Wallets with immutable proof on Arc.**
 
 Built for the **Lepton Agents Hackathon** (Canteen × Circle on Arc).
-
+new demo link is now at :      i mistakenly submitted a corrupted link and had to reupload the demo. i have screenshots that support this argument if needed
 ---
 
 ## 🛑 The Problem

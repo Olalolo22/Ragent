@@ -50,11 +50,12 @@ const COMPUTE_PERSONALITIES: AgentPersonality[] = [
  */
 export async function generateDynamicIntent(
   taskDescription: string,
-  basePayload: Record<string, any> = {}
+  basePayload: Record<string, any> = {},
+  forceMock = false
 ): Promise<Intent> {
   const intentId = 'intent-api-' + Date.now();
 
-  if (!openai) {
+  if (!openai || forceMock) {
     // Mock: simple rule-based dynamic policy for demo reliability
     const isLatencyCritical = /price|live|real-time|fast|urgent/i.test(taskDescription);
     return {
@@ -104,7 +105,7 @@ Rules:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4,
       max_tokens: 300,
-    });
+    }, { timeout: 3500 });
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
@@ -120,7 +121,7 @@ Rules:
     };
   } catch (e) {
     console.warn('LLM intent generation failed, falling back to mock', e);
-    return generateDynamicIntent(taskDescription, basePayload); // retry with mock
+    return generateDynamicIntent(taskDescription, basePayload, true); // retry with mock
   }
 }
 
@@ -181,11 +182,12 @@ export async function generateBid(
   intent: Intent,
   providerAddress: string,
   personality: AgentPersonality,
-  agentId?: string
+  agentId?: string,
+  forceMock = false
 ): Promise<Bid> {
   const bidId = 'bid-' + personality.name.toLowerCase() + '-' + Date.now().toString(36);
 
-  if (!openai) {
+  if (!openai || forceMock) {
     // Mock bids with personality flavor — per job_type
     let price = 0.03;
     let latency = 700;
@@ -279,7 +281,7 @@ Guidelines:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.5,
       max_tokens: 150,
-    });
+    }, { timeout: 3500 });
 
     const text = completion.choices[0]?.message?.content || '{}';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
@@ -313,7 +315,7 @@ Guidelines:
     };
   } catch {
     // fallback mock
-    return generateBid(intent, providerAddress, personality, agentId);
+    return generateBid(intent, providerAddress, personality, agentId, true);
   }
 }
 
