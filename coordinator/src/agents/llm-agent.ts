@@ -105,7 +105,7 @@ Rules:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4,
       max_tokens: 300,
-    }, { timeout: 3500 });
+    }, { timeout: 2000 });
 
     const text = completion.choices[0]?.message?.content?.trim() || '{}';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
@@ -281,7 +281,7 @@ Guidelines:
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.5,
       max_tokens: 150,
-    }, { timeout: 3500 });
+    }, { timeout: 2000 });
 
     const text = completion.choices[0]?.message?.content || '{}';
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
