@@ -11,7 +11,7 @@
  */
 
 import OpenAI from 'openai';
-import { Intent, Bid } from '../schemas';
+import { Intent, Bid } from '../schemas.js';
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 

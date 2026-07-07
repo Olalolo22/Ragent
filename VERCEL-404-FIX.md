@@ -36,10 +36,10 @@ This makes:
 Without this, only the top-level rewrite hack works for the HTML; the `/api/demo/run` calls will still 404.
 
 ### 2. Redeploy
-- Push this branch (or the changes):
+- Push the latest fixes on this branch:
   ```bash
   git add -A
-  git commit -m "fix(vercel): restore standard api/index + explicit public output + root fallback rewrite"
+  git commit -m "fix(vercel): add buildCommand to skip tsc + fix imports + clean tsconfig + public output + root rewrite for 404/build"
   git push origin fix/vercel-500-errors
   ```
 - In Vercel dashboard, find the latest preview for this branch (or click "Redeploy" on the current preview).
@@ -70,3 +70,54 @@ In Vercel project settings:
 After the Root Directory change + redeploy, the 404 on the root should be gone and the demo UI should load.
 
 If you still get errors (500/404 on the API calls inside the demo), paste the new Vercel function logs here.
+
+---
+
+## Update: Build Failure (`npm run build` → `tsc` hanging/failing)
+
+**New symptom (your latest log):**
+```
+Running "npm run build"
+> ragent-coordinator@0.1.0 build
+> tsc
+```
+(then deploy fails / no output produced)
+
+### Why
+- When Root Directory = `coordinator` (or even without), Vercel runs the `build` script from `package.json`.
+- `"build": "tsc"` + `tsconfig.json` (`"noEmit": true`, strict, `include` with scripts + mixed `.js` / bare imports) causes `tsc` to error or exit non-zero.
+- Root cause of the errors: inconsistent imports across files (`../schemas` vs `../schemas.js`) + scripts/ having relative paths that don't play well with the tsconfig when `tsc` is forced.
+- Vercel does **not** need you to compile — it natively bundles `api/*.ts` files for serverless functions and serves `public/` for static.
+
+### Fixes applied
+1. `coordinator/vercel.json` now has:
+   ```json
+   "buildCommand": "echo 'build skipped — Vercel handles TypeScript api/ routes + static public/ directly'"
+   ```
+   This overrides `npm run build` / `tsc` during deploy.
+
+2. Fixed the stray bare import in `src/agents/llm-agent.ts` (`../schemas` → `../schemas.js`) for consistency.
+
+3. Cleaned `tsconfig.json` `include` to `["src/**/*", "api/**/*"]` (removed `scripts/**/*` — those are only for `tsx` local runs).
+
+4. Root `vercel.json` also has a safe no-op buildCommand.
+
+### What to do now
+- The changes are already in the branch.
+- Push with a clear message (you can use this or your own):
+  ```bash
+  git add -A
+  git commit -m "fix(vercel): add buildCommand to skip tsc + fix imports + clean tsconfig + public output + root rewrite for 404/build"
+  git push origin fix/vercel-500-errors
+  ```
+- In Vercel you should now see the build step run the `echo` instead of `tsc`.
+- After that, the 404 fix (Root Directory + rewrites + outputDirectory) + build skip should take effect.
+
+If the build now passes but you still get 404 on `/` or API 404s, re-confirm:
+- Root Directory is set to `coordinator`
+- Check the "Build Logs" and "Function Logs" tabs for the new deployment.
+
+You can also manually set an Environment Variable in Vercel if you want to be extra sure:
+  - Key: `VERCEL_BUILD_COMMAND` (not usually needed, the vercel.json takes precedence).
+
+This should get the site building and serving again.

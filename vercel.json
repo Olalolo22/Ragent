@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "echo 'root-level: relying on Root Directory=coordinator or subdir rewrites'",
   "rewrites": [
     { "source": "/", "destination": "/coordinator/public/index.html" },
     { "source": "/index.html", "destination": "/coordinator/public/index.html" }
