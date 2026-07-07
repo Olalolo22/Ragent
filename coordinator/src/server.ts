@@ -133,8 +133,8 @@ async function getContracts(): Promise<DeployedContracts> {
   return deployedContracts;
 }
 
-const app = new Hono().basePath('/api');
-
+const rootApp = new Hono();
+const app = rootApp.basePath('/api');
 // ---------------------------------------------------------------------------
 // Security headers middleware (CSP, clickjacking, sniff protection)
 // ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ app.use('*', async (c, next) => {
 // This is only a fallback. The real fancy dashboard is served as static from public/index.html
 // (via the "/" rewrite to "/index.html" in vercel.json + Vercel's normal public/ behavior).
 // ---------------------------------------------------------------------------
-app.get('/', (c) => {
+rootApp.get('/', (c) => {
   // Serve the full fancy self-contained dashboard
   return c.html(dashboardHtml);
 });
@@ -607,4 +607,4 @@ app.get('/circle/status', (c) => {
 // ---------------------------------------------------------------------------
 // Export for testing / Bun / Vercel Edge adapter
 // ---------------------------------------------------------------------------
-export default app;
+export default rootApp;
