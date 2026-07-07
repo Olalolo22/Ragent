@@ -27,9 +27,9 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import * as fs from 'fs';
-import escrowArtifact from '../artifacts/RagentEscrow.json';
-import registryArtifact from '../artifacts/RagentRegistry.json';
-import mockUsdcArtifact from '../artifacts/MockUSDC.json';
+import escrowArtifact from '../artifacts/RagentEscrow.json' with { type: 'json' };
+import registryArtifact from '../artifacts/RagentRegistry.json' with { type: 'json' };
+import mockUsdcArtifact from '../artifacts/MockUSDC.json' with { type: 'json' };
 
 const ANVIL_RPC = 'http://localhost:8545';
 const ARC_TESTNET_RPC = process.env.ARC_RPC || 'https://rpc.testnet.arc.network';
