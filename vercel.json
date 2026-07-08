@@ -1,4 +1,0 @@
-{
-  "version": 2,
-  "buildCommand": "echo 'root vercel.json (only used if Root Directory not set to coordinator)'"
-}
