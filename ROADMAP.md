@@ -1,5 +1,18 @@
-## Ragent v2 — Next Steps Roadmap
+# Ragent Roadmap
 
+## Vision
+Ragent is the coordination layer underneath agent marketplaces.
+Any agent marketplace can plug into Ragent for negotiation, escrow, and settlement without building it themselves.
+
+## v1 (Shipped — Lepton Hackathon, July 2026)
+- Coordination and discovery layer on Arc
+- Policy-driven selection algorithm
+- RagentSettlementLog deployed to Arc Testnet
+- 41 on-chain transactions
+
+---
+
+## v2 (Next Steps)
 This is the 4-week sprint to take Ragent from a hackathon proof-of-concept to a genuine, fundable Web3 startup.
 
 ### Week 1 — Real Agents
