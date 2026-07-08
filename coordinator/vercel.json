@@ -11,14 +11,10 @@
       ]
     }
   ],
-  "rewrites": [
-    { "source": "/", "destination": "/api" },
-    { "source": "/api/(.*)", "destination": "/api" }
+  "builds": [
+    { "src": "src/server.ts", "use": "@vercel/node" }
   ],
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "public/index.html"
-    }
-  },
-  "buildCommand": "echo 'build skipped — Vercel handles TypeScript api/ routes + static public/ directly'"
+  "routes": [
+    { "src": "/(.*)", "dest": "src/server.ts" }
+  ]
 }
