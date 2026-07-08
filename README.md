@@ -5,7 +5,7 @@
 Video Pitch & Demo → **[Watch on YouTube](https://youtu.be/0geWzkZV5eE)** *(Note: I submitted an invalid link to the hackathon form, and YouTube took down the original video I made then, so I had to re-record and include the new link here!)*  
 Live App → **[ragent-five.vercel.app](https://ragent-five.vercel.app)**  
 On-chain → **[RagentSettlementLog on Arc Testnet](https://testnet.arcscan.app/address/0xd50838781f1ab38308121357a3f6067180a435cd)**  
-Built for → **Lepton Agents Hackathon (Canteen × Circle on Arc)**
+Built during → **Lepton Agents Hackathon (Canteen × Circle on Arc)**
 
 ---
 
