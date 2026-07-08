@@ -4,6 +4,20 @@
 Ragent is the coordination layer underneath agent marketplaces.
 Any agent marketplace can plug into Ragent for negotiation, escrow, and settlement without building it themselves.
 
+## Ecosystem Position
+- **Orchestrator** — decides what needs to be done
+- **Marketplace** — discovers available agents  
+- **Ragent** — negotiates, scores, escrows, settles
+- **Arc + Circle** — settlement and payment rails
+
+Ragent sits between the marketplace and the money.
+No orchestrator or marketplace needs to build their own
+coordination and payment logic — they plug into Ragent.
+
+## Potential Integrations (In Discussion)
+- Agent marketplace (Jay) — discovery layer
+- Agent orchestrator — task routing layer
+
 ## v1 (Shipped — Lepton Hackathon, July 2026)
 - Coordination and discovery layer on Arc
 - Policy-driven selection algorithm
